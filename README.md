@@ -1,6 +1,6 @@
 ## Goal
 GeneticProgramming is an F#-based implementation of 
-[Genetic Programming](https://github.com/adam-p/markdown-here/wiki/Markdown-Cheatsheet#links).
+[Genetic Programming](https://en.wikipedia.org/wiki/Genetic_programming).
 It generates random programs in a simplified functional language,
 and then crossbreeds and mutates them in an attempt to **produce a sorting algorithm**.
 
