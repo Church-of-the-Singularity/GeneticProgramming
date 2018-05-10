@@ -41,7 +41,7 @@ type PrimitiveInterBreeder(random: System.Random) =
                 | None -> expr
                 | Some genes ->
                     let gene = this.Random.Next(genes.Length)
-                    List.nth genes gene
+                    List.item gene genes
         map cut e1
 
     member this.Crossover(crossoverProbability, e1, e2) =

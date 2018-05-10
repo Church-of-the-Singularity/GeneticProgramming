@@ -1,10 +1,5 @@
 ﻿module GeneticProgramming.AST
 
-open System.Reflection
-
-open Microsoft.FSharp.Reflection
-open Microsoft.FSharp.Quotations
-
 type BinOpType =
     | Sum | Diff | Mul
     /// fun x y -> x < y
@@ -104,7 +99,8 @@ type Expression =
         | Lambda({ Type = varType }, result) -> Function(varType, result.ComputeType())
         | Apply(func, _) ->
             match func.ComputeType() with
-            Function(_, targetType) -> targetType
+            | Function(_, targetType) -> targetType
+            | _ -> failwith "bad function type"
 
     member this.GetFreeVariables() =
         match this with
@@ -272,10 +268,11 @@ module IntegerConstants =
     let minusOne = BinOp(Diff, Zero, One)
 
     let rec make n =
-        if n < 0 then notImplemented()
-        elif n = 0 then Zero
+        if n = 0 then Zero
         elif n = 1 then One
+        elif n = -1 then BinOp(Diff, Zero, One)
         elif n % 2 = 0 then BinOp(Mul, two, make(n/2))
+        elif n < 0 then BinOp(Diff, make(n + 1), One)
         else BinOp(Sum, One, make(n - 1))
 
 let Minus a b = BinOp(Diff, a, b)

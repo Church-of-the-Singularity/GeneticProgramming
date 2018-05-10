@@ -33,7 +33,7 @@ type PrimitiveMutator(random: System.Random) as this =
                     if vars = Set.empty then return! None
                     else
                         let index = this.Random.Next(Set.count vars)
-                        let varName = Seq.nth index vars
+                        let varName = Seq.item index vars
                         return makeTerm varName env.Vars.[varName].Type
                         //return Expr.Var(Var(varName, toClrType env.Vars.[varName].Type))
                 }

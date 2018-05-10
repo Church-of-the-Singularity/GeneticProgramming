@@ -8,10 +8,10 @@
     <OutputType>Library</OutputType>
     <RootNamespace>QGeneticProgramming.Test</RootNamespace>
     <AssemblyName>QGeneticProgramming.Test</AssemblyName>
-    <targetframeworkversion>v4.5</targetframeworkversion>
+    <targetframeworkversion>v4.7.1</targetframeworkversion>
     <Name>FsUnitTest</Name>
     <TargetFrameworkProfile />
-    <TargetFSharpCoreVersion>4.3.0.0</TargetFSharpCoreVersion>
+    <TargetFSharpCoreVersion>4.4.3.0</TargetFSharpCoreVersion>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
     <RestorePackages>true</RestorePackages>
   </PropertyGroup>
