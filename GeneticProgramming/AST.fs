@@ -2,6 +2,8 @@
 
 open System.Diagnostics
 
+open ShortPointers
+
 [<Struct>]
 type BinOpType =
     | Sum | Diff | Mul
@@ -31,35 +33,36 @@ type TermInfo =
         Type: ExpressionType    }
     override this.ToString() = sprintf "v%d: %O" this.Term this.Type
 
-type Expression =
+type ERef<'P> = TypedPointer<'P, Expression<'P>>
+and [<Struct>] Expression<'P> =
     /// 0
     | Zero
     /// 1
     | One
     /// Random integer value between 0 and (Expression - 1)
-    | Rand of Expression
+    | Rand of rand:ERef<'P>
 
-    | BinOp of BinOpType * Expression * Expression
+    | BinOp of binOp:BinOpType * left:ERef<'P> * right:ERef<'P>
 
     /// IF right = 0 THEN fallback ELSE left OP right @@>
-    | TriOp of TriOpType * Expression * Expression * Expression
+    | TriOp of triOp:TriOpType * tleft:ERef<'P> * tright:ERef<'P> * fallback:ERef<'P>
 
     /// if cond then onTrue else onFalse
-    | Cond of Expression * Expression * Expression
+    | Cond of cond:ERef<'P> * onTrue:ERef<'P> * onFalse:ERef<'P>
 
     /// (=) 0
-    | IsZero of Expression
+    | IsZero of isZero:ERef<'P>
 
-    | EmptyList of ExpressionType
+    | EmptyList of listType:ExpressionType
 
-    | Cons of Expression * Expression
-    | Match of MatchExpression
-    | Length of Expression
+    | Cons of head:ERef<'P> * tail:ERef<'P>
+    | Match of switch:MatchExpression<'P>
+    | Length of len:ERef<'P>
 
-    | Term of TermInfo
-    | Let of LetExpression
-    | Lambda of TermInfo * (*body*)Expression
-    | Apply of Expression * Expression
+    | Term of term:TermInfo
+    | Let of binding:LetExpression<'P>
+    | Lambda of arg:TermInfo * body:ERef<'P>
+    | Apply of func:ERef<'P> * applyTo:ERef<'P>
 
     member this.NodeCount() = this.NodeCount(0)
 
@@ -76,8 +79,33 @@ type Expression =
                     EmptyCase = b
                     HeadTail = c } -> c.NodeCount(b.NodeCount(a.NodeCount(acc + 1)))
 
+and MatchExpression<'P> = {
+        /// Input list
+        List:       Expression<'P>;
+        /// Expression, computed if list is empty
+        EmptyCase:  Expression<'P>;
+        /// Function, that is of form 'a -> 'a list -> 'b.
+        /// It will accept head and tail, and return result value
+        HeadTail:   Expression<'P>;
+    }
+
+and LetExpression<'P> = {
+        /// Bound value
+        Value:  Expression<'P>;
+        /// Expression to be computed with bound term
+        Expression: Expression<'P>;
+        Recursive:  bool;
+        /// Bound term
+        Term: byte;
+    }
+
+type PooledExpression<'P> =
+    { Expr: Expression<'P>;
+      Pool: StructPool<'P, Expression<'P>>; }
+    
+
     member this.Subexpressions =
-        match this with
+        match this.Expr with
         | Zero | One -> []
         | Rand limit -> [limit]
         | BinOp(_, a, b) -> [a; b]
@@ -102,7 +130,7 @@ type Expression =
         | Term _ -> []
 
     member this.ComputeType() =
-        match this with
+        match this.Expr with
         | Zero | One | Rand _
         | BinOp _ | TriOp _
         | IsZero _ -> Integer
@@ -151,7 +179,7 @@ type Expression =
             | _ -> failwith "bad function type"
 
     member this.GetFreeVariables() =
-        match this with
+        match this.Expr with
         | Zero | One -> Map.empty
 
         | Rand limit -> limit.GetFreeVariables()
@@ -289,27 +317,6 @@ type Expression =
             subprint arg
 
         ()
-        
-
-and MatchExpression = {
-        /// Input list
-        List:       Expression;
-        /// Expression, computed if list is empty
-        EmptyCase:  Expression;
-        /// Function, that is of form 'a -> 'a list -> 'b.
-        /// It will accept head and tail, and return result value
-        HeadTail:   Expression;
-    }
-
-and LetExpression = {
-        /// Bound value
-        Value:  Expression;
-        /// Expression to be computed with bound term
-        Expression: Expression;
-        Recursive:  bool;
-        /// Bound term
-        Term: byte;
-    }
 
 module IntegerConstants =
     let two = BinOp(Sum, One, One)
@@ -329,9 +336,9 @@ let Plus a b = BinOp(Sum, a, b)
 let termOfTuple (term, ``type``) = { Term = term; Type = ``type`` }
 let makeTerm term ``type`` = Term{ Term = term; Type = ``type`` }
 
-let typeOf (expr: Expression) = expr.ComputeType()
+let typeOf (expr: PooledExpression<_>) = expr.ComputeType()
 
-let getSubexpressions (expr: Expression) = expr.Subexpressions
+let getSubexpressions (expr: PooledExpression<_>) = expr.Subexpressions
 
 let getRecSubexpressions expr =
     let children = getSubexpressions expr
