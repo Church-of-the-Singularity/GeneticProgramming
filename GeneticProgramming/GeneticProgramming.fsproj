@@ -44,6 +44,7 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
+    <Compile Include="ShortPointers.fs" />
     <Compile Include="ExpressionType.fs" />
     <Compile Include="IDataModel.fs" />
     <Compile Include="AST.fs" />
