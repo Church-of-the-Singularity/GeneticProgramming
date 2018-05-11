@@ -332,6 +332,7 @@ let overseerTest() =
 //        for worker in workers do
 //            worker.Pause <- false
 
+ShortPointers.poolTest()
 
 overseerTest()
 
