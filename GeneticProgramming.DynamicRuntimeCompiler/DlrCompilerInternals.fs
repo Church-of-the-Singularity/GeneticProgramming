@@ -6,7 +6,7 @@ type DlrExpression = System.Linq.Expressions.Expression
 type DlrVariable = System.Linq.Expressions.ParameterExpression
 type private TranslationEnvironment =
     {   Variables: Map<string, DlrVariable>
-        TailCallJump: option<int * System.Linq.Expressions.LabelTarget * DlrVariable list>  }
+        TailCallJump: option<byte * System.Linq.Expressions.LabelTarget * DlrVariable list>  }
 
 let private emptyTranslationEnvironment =
     {   Variables = Map.empty

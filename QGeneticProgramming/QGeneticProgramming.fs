@@ -3,15 +3,12 @@
 open System.Threading
 
 open Microsoft.FSharp.Collections
-open Microsoft.FSharp.Quotations
 
 open GeneticProgramming
 open GeneticProgramming.AST
 open GeneticProgramming.Execution
-open GeneticProgramming.Types
 
 open QGeneticProgramming
-open QGeneticProgramming.Values
 
 let cacheItemLimit = 65536
 
@@ -242,11 +239,13 @@ let overseerTest() =
     let stopwatch = Stopwatch()
     stopwatch.Start()
 
+    #if !DEBUG
     let thisProc = System.Diagnostics.Process.GetCurrentProcess()
     ProcessOverseer.Program.attach
         [ProcessOverseer.ExitCodes.CtrlC] thisProc.Id
         (System.Reflection.Assembly.GetExecutingAssembly().Location) []
     |> ignore
+    #endif
     Thread.CurrentThread.Priority <- ThreadPriority.Highest
 
     let workerCount = cliOptions.WorkerCount

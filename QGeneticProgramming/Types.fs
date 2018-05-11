@@ -1,7 +1,6 @@
 ﻿module QGeneticProgramming.Types
 
 open GeneticProgramming
-open GeneticProgramming.Types
 
 let private genericList = typeof<int list>.GetGenericTypeDefinition()
 let private genericFunc = typeof<int -> int>.GetGenericTypeDefinition()

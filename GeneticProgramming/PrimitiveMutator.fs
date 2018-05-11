@@ -6,6 +6,7 @@ open GeneticProgramming.AST
 open GeneticProgramming.GenerationUtils
 open GeneticProgramming.ExpressionGenerationEnvironment
 open GeneticProgramming.Types
+open System.Diagnostics
 
 [<System.Serializable>]
 type PrimitiveMutator(random: System.Random) as this =
@@ -34,6 +35,9 @@ type PrimitiveMutator(random: System.Random) as this =
                     else
                         let index = this.Random.Next(Set.count vars)
                         let varName = Seq.item index vars
+                        #if DEBUG
+                        assert(env.Vars.[varName].Type = vtype)
+                        #endif
                         return makeTerm varName env.Vars.[varName].Type
                         //return Expr.Var(Var(varName, toClrType env.Vars.[varName].Type))
                 }
@@ -94,6 +98,15 @@ type PrimitiveMutator(random: System.Random) as this =
                 Some(Match{ List=list; EmptyCase=empty; HeadTail=nempty })
 
             50, fun env vtype allowRec -> None   ]
+        #if DEBUG
+        |> List.map (fun (weight, gen) ->
+            let verifyingGen env vtype allocRec =
+                let expr = gen env vtype allocRec
+                let exprType = Option.map computeType expr
+                expr
+            weight, verifyingGen
+        )
+        #endif
         |> makeWeightenedGenerator
 
     let randomTypes =
@@ -181,9 +194,10 @@ type PrimitiveMutator(random: System.Random) as this =
         value
 
     member this.RandomFunction env fromType toType allowRec =
+        Debug.Assert(toType <> Unchecked.defaultof<ExpressionType>)
         let funcType = Function(fromType, toType)
         let simple() =
-            let varID = this.Random.Next()
+            let varID = byte <| this.Random.Next()
             let innerEnv = declare { Term = varID; Type = fromType } false env
             let value = this.RandomValue(toType, innerEnv)
             Lambda({ Term = varID; Type = fromType}, value)
@@ -222,10 +236,20 @@ type PrimitiveMutator(random: System.Random) as this =
     member this.Mutate(mutationProbability, expr: Expression, ?genEnv) =
         System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack()
 
+        #if DEBUG
+        let exprType = computeType expr
+        #endif
+
         let genEnv = defaultArg genEnv ExpressionGenerationEnvironment.Empty
         if this.Random.Next(probabilityPrecision) >= mutationProbability then
             // ExprTree.map (this.Mutate mutationProbability genEnv) expr
-            let mutate env = fun expr -> this.Mutate(mutationProbability, expr, env)
+            let mutate env = fun expr ->
+                let mutated = this.Mutate(mutationProbability, expr, env)
+                #if DEBUG
+                let exprType = computeType expr
+                assert(computeType mutated = exprType)
+                #endif
+                mutated
             let mutateDefault = mutate { genEnv with Depth = genEnv.Depth + 1 }
             match expr with
             | Apply(f, v) ->
@@ -301,4 +325,11 @@ type PrimitiveMutator(random: System.Random) as this =
                      expr, genEnv)
 
     interface IMutator<Expression> with
-        member this.Mutate expr = this.Mutate(probabilityPrecision / 10, expr)
+        member this.Mutate expr =
+            let mutable mutated = this.Mutate(probabilityPrecision / 10, expr)
+            while mutated.NodeCount() > 160 do
+                mutated <- this.Mutate(probabilityPrecision / 10, expr)
+            #if DEBUG
+            assert(computeType mutated = computeType expr)
+            #endif
+            mutated

@@ -19,6 +19,9 @@ type PrimitiveInterBreeder(random: System.Random) =
                     (fun expr var vtype -> Lambda({Term = var; Type = vtype}, expr))
                     expr variables
             assert(closed.GetFreeVariables().Count = 0)
+            #if DEBUG
+            assert(computeType expr = computeType closed)
+            #endif
             closed
 
         let append exprMap expr =
@@ -27,6 +30,7 @@ type PrimitiveInterBreeder(random: System.Random) =
             Map.add exprType (expr :: exprs) exprMap
 
         children
+        |> List.filter (fun e -> (getFreeVariables e).IsEmpty)
         |> List.map attachFreeVariables
         |> List.fold append Map.empty
 
@@ -50,4 +54,7 @@ type PrimitiveInterBreeder(random: System.Random) =
 
     interface IInterBreeder<Expression> with
         member this.Cross(e1, e2) =
-            this.Crossover(probabilityPrecision / 20, e1, e2)
+            let mutable result = this.Crossover(probabilityPrecision / 20, e1, e2)
+            while result.NodeCount() > 160 do
+                result <- this.Crossover(probabilityPrecision / 20, e1, e2)
+            result

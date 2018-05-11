@@ -4,7 +4,6 @@ open Microsoft.FSharp.Reflection
 open Microsoft.FSharp.Quotations
 
 open GeneticProgramming
-open GeneticProgramming.Types
 
 let rec makeDefaultValue etype =
     match etype with

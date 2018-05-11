@@ -1,5 +1,8 @@
 ﻿module GeneticProgramming.AST
 
+open System.Diagnostics
+
+[<Struct>]
 type BinOpType =
     | Sum | Diff | Mul
     /// fun x y -> x < y
@@ -12,6 +15,7 @@ type BinOpType =
         | Mul -> '*'
         | Less -> '<'
 
+[<Struct>]
 type TriOpType =
     | Div | Mod
 
@@ -20,8 +24,10 @@ type TriOpType =
         | Div -> '/'
         | Mod -> '%'
 
+//[<Struct>]
+//[<CLIMutable>] 
 type TermInfo =
-    {   Term: int
+    {   Term: byte
         Type: ExpressionType    }
     override this.ToString() = sprintf "v%d: %O" this.Term this.Type
 
@@ -54,6 +60,21 @@ type Expression =
     | Let of LetExpression
     | Lambda of TermInfo * (*body*)Expression
     | Apply of Expression * Expression
+
+    member this.NodeCount() = this.NodeCount(0)
+
+    member private this.NodeCount(acc) =
+        match this with
+        | Zero | One | Term _ | EmptyList _ -> acc + 1
+        | Rand a | IsZero a | Length a | Lambda (_, a) -> a.NodeCount(acc + 1)
+        | BinOp(_, a, b) | Cons (a, b) 
+        | Let { Value = a
+                Expression = b }
+        | Apply (a, b)  -> b.NodeCount(a.NodeCount(acc + 1))
+        | TriOp (_, a,b,c) | Cond(a,b,c)
+        | Match {   List = a
+                    EmptyCase = b
+                    HeadTail = c } -> c.NodeCount(b.NodeCount(a.NodeCount(acc + 1)))
 
     member this.Subexpressions =
         match this with
@@ -88,18 +109,45 @@ type Expression =
 
         | EmptyList(elemType) -> List(elemType)
 
-        | Cons(head, _) -> List(head.ComputeType())
-        | Cond(_,onTrue,_) -> onTrue.ComputeType()
-        | Match{ EmptyCase = empty } -> empty.ComputeType()
+        | Cons(head, tail) ->
+            let headType = head.ComputeType()
+            #if DEBUG
+            assert(List(headType) = tail.ComputeType())
+            #endif
+            List(headType)
+        | Cond(cond,onTrue,onFalse) ->
+            let trueType = onTrue.ComputeType()
+            #if DEBUG
+            assert(cond.ComputeType() = Integer)
+            let falseType = onFalse.ComputeType()
+            assert(falseType = trueType)
+            #endif
+            trueType
+        | Match{ List = list
+                 EmptyCase = empty
+                 HeadTail = headTail } ->
+            let emptyType = empty.ComputeType()
+            #if DEBUG
+            let (List itemType) = list.ComputeType()
+            let (Function (handlerItemType, (Function (handlerListType, handlerResult)))) = headTail.ComputeType()
+            Debug.Assert((itemType = handlerItemType), "handler item type mismatch")
+            Debug.Assert((handlerListType = List(itemType)), "handler list type mismatch")
+            Debug.Assert((handlerResult = emptyType), "handler non-empty does not match empty")
+            #endif
+            emptyType
 
         | Length _ -> Integer
 
         | Term{ Type = t } -> t
         | Let{ Expression = expr } -> expr.ComputeType()
         | Lambda({ Type = varType }, result) -> Function(varType, result.ComputeType())
-        | Apply(func, _) ->
+        | Apply(func, arg) ->
             match func.ComputeType() with
-            | Function(_, targetType) -> targetType
+            | Function(argType, targetType) ->
+                #if DEBUG
+                assert(argType = arg.ComputeType())
+                #endif
+                targetType
             | _ -> failwith "bad function type"
 
     member this.GetFreeVariables() =
@@ -254,13 +302,13 @@ and MatchExpression = {
     }
 
 and LetExpression = {
-        Recursive:  bool;
-        /// Binded term
-        Term: int;
-        /// Binded value
+        /// Bound value
         Value:  Expression;
-        /// Expression to be computed with binded term
+        /// Expression to be computed with bound term
         Expression: Expression;
+        Recursive:  bool;
+        /// Bound term
+        Term: byte;
     }
 
 module IntegerConstants =

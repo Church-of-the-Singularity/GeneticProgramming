@@ -10,8 +10,8 @@ type VariableInfo =
 
 /// Expression tree generation environment
 type ExpressionGenerationEnvironment =
-    {   VarTypes: Map<ExpressionType, int Set>
-        Vars: Map<int, VariableInfo>
+    {   VarTypes: Map<ExpressionType, byte Set>
+        Vars: Map<byte, VariableInfo>
         Random: System.Random
         Depth: int }
 
@@ -24,16 +24,21 @@ type ExpressionGenerationEnvironment =
             Random = random; Depth = 1 }
 
 let declare (term: TermInfo) recVal env =
+    let oldVar = Map.tryFind term.Term env.Vars
     let newVars = Map.add term.Term { Type = term.Type; Recursive = recVal } env.Vars
+    let varTypes =
+        match oldVar with
+        | Some var -> Map.remove var.Type env.VarTypes
+        | None -> env.VarTypes
     let newTypeVars =
         match Map.tryFind term.Type env.VarTypes with
         | None -> Set.singleton term.Term
         | Some vars -> Set.add term.Term vars
     { env with
-        VarTypes = Map.add term.Type newTypeVars env.VarTypes;
+        VarTypes = Map.add term.Type newTypeVars varTypes;
         Vars = newVars  }
 
 let declareRandom vtype recVal env =
-    let varID = env.Random.Next()
+    let varID = byte <| env.Random.Next()
     System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack()
     declare { Term = varID; Type = vtype } recVal env, varID

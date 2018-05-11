@@ -64,12 +64,7 @@ let private setRef expr value = Expr.PropertySet(expr, refValue expr, value)
 
 //#region Variables
 let private varNameS suffix term ``type`` =
-    if term >= 0 then
-        Var(sprintf "v%d%s" term suffix, ``type``)
-    elif term = System.Int32.MinValue then
-        Var(sprintf "v_%s" suffix, ``type``)
-    else
-        Var(sprintf "v_%d%s" -term suffix, ``type``)
+    Var(sprintf "v%d%s" term suffix, ``type``)
 
 let private varName = varNameS ""
 
@@ -255,7 +250,8 @@ let rec private compileRec this env =
                 HeadTail = nempty   } ->
         let listExpr = compile list
         let emptyExpr = compilePass empty
-        let matchNo = System.Threading.Interlocked.Increment matchNo
+        let matchHead = System.Threading.Interlocked.Increment matchNo
+        let matchTail = System.Threading.Interlocked.Increment matchNo
 
         match list.ComputeType(), empty.ComputeType() with
         List(elemType), resultType ->
@@ -264,8 +260,8 @@ let rec private compileRec this env =
             let tailTypeClr = toClrType(List elemType)
 
             let nemptyExpr =
-                let localHead = { Term = int matchNo; Type = elemType }
-                let localTail = { Term = int -matchNo; Type = List elemType }
+                let localHead = { Term = byte matchHead; Type = elemType }
+                let localTail = { Term = byte -matchTail; Type = List elemType }
                 let reducedBody = Apply(Apply(nempty, Term localHead), Term localTail) |> AST.reduce
                 let body = compilePass <| reducedBody
 

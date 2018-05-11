@@ -27,7 +27,7 @@
     <DocumentationFile>bin\Debug\QGeneticProgramming.XML</DocumentationFile>
     <Prefer32Bit>false</Prefer32Bit>
     <StartAction>Project</StartAction>
-    <StartArguments>--compiler DLR</StartArguments>
+    <StartArguments>--compiler DLR --verbose</StartArguments>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugType>pdbonly</DebugType>
