@@ -33,6 +33,14 @@ type TermInfo =
         Type: ExpressionType    }
     override this.ToString() = sprintf "v%d: %O" this.Term this.Type
 
+type TermAllocator() =
+    let mutable current = 0uy
+
+    member i.MakeVar(varType) =
+        let result = { Term = current; Type = varType }
+        current <- Checked.(+) current 1uy
+        result
+
 type Expression =
     /// 0
     | Zero
@@ -327,11 +335,16 @@ module IntegerConstants =
 
 let Minus a b = BinOp(Diff, a, b)
 let Plus a b = BinOp(Sum, a, b)
+let Not a = IsZero(a)
+let IsLess a b = BinOp(Less, a, b)
 
 let termOfTuple (term, ``type``) = { Term = term; Type = ``type`` }
 let makeTerm term ``type`` = Term{ Term = term; Type = ``type`` }
 
 let typeOf (expr: Expression) = expr.ComputeType()
+let checkType expr =
+    typeOf expr |> ignore
+    expr
 
 let getSubexpressions (expr: Expression) = expr.Subexpressions
 

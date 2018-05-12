@@ -6,7 +6,7 @@ type olist = obj list
 
 type private InterpreterState =
     {   Random: System.Random;
-        Bindings: Map<int, obj>;    }
+        Bindings: Map<byte, obj>;    }
 
     static member Create() =
         {   Random = System.Random();
