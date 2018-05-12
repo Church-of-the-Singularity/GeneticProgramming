@@ -251,6 +251,9 @@ let overseerTest() =
 
     let workerCount = cliOptions.WorkerCount
 
+    let masterRandom = System.Random()
+    let masterFitness: IFitness<Expression, int64> = upcast SortFitness(masterRandom)
+
     let generation, index =
         if System.IO.File.Exists(saveFile) then
             printf "loading..."
@@ -259,13 +262,10 @@ let overseerTest() =
             gen, idx
         else
             printfn "started from scratch"
-            let random = System.Random()
-            let mutator = PrimitiveMutator(random)
-            let breeder = PrimitiveInterBreeder(random)
+            let mutator = PrimitiveMutator(masterRandom)
+            let breeder = PrimitiveInterBreeder(masterRandom)
 
-            let fitness = SortFitness(random)
-
-            let strategy = PrimitiveStrategy(mutator, breeder, fitness)
+            let strategy = PrimitiveStrategy(mutator, breeder, masterFitness)
             let itemsToGenerate = strategy.GenerationSize * workerCount
             let initialGeneration = List.init strategy.GenerationSize (fun _ -> mutator.RandomValue(sortType))
             initialGeneration, 0L
@@ -298,7 +298,10 @@ let overseerTest() =
 
         printfn "time is out"
 
-        let best = workers |> Array.map (fun w -> w.Best) |> Array.min
+        let best =
+            workers
+            |> Seq.collect (fun w -> List.map masterFitness.Fitness w.CurrentGeneration)
+            |> Seq.min
         let gens = workers |> Array.map (fun w -> w.ProcessedCount)
         let generation = workers |> Seq.collect (fun w -> w.CurrentGeneration) |> List.ofSeq
         let processedFromStart = workers |> Seq.sumBy(fun w -> w.ProcessedCount)

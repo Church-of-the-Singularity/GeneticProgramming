@@ -41,7 +41,7 @@ type PrimitiveStrategy (mutator: IMutator<Expression>,
         let newGeneration =
             Seq.concat [children; mutants; cross]
             |> Seq.distinctBy box
-            |> Seq.sortBy(fun func -> error func)
+            |> Seq.sortBy error
             |> Seq.truncate generationSize
             |> Seq.toList
 
