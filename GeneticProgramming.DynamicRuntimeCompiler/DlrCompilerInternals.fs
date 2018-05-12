@@ -14,8 +14,8 @@ let private emptyTranslationEnvironment =
 
 open GeneticProgramming
 open GeneticProgramming.AST
-
 open GeneticProgramming.DynamicRuntimeCompiler
+open GeneticProgramming.Types
 
 let mutable memoryLimit = System.Int64.MaxValue
 
@@ -45,7 +45,6 @@ let rec toClrType = function
         genericList.MakeGenericType[| elemType |> toClrType |]
     | Function(arg, res) ->
         genericFunc.MakeGenericType[| arg |> toClrType; res |> toClrType |]
-    | _ -> invalidArg "ExpressionType" "TyVars do not have appropriate CLR types" 
 
 let rec private compileRec expr env: DlrExpression =
     System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack()
@@ -122,7 +121,7 @@ let rec private compileRec expr env: DlrExpression =
         doReturn <| DlrExpression.Call(cons, headV, tailV)
 
     | EmptyList(t) ->
-        let listType = ExpressionType.List t |> toClrType
+        let listType = ListType t |> toClrType
         doReturn <| DlrExpression.Property(null, listType, "Empty")
 
     | IsZero(v) ->
@@ -213,7 +212,7 @@ let rec private compileRec expr env: DlrExpression =
         let nemptyExpr = compile nempty
 
         match list.ComputeType(), empty.ComputeType() with
-        ExpressionType.List(elemType), resultType ->
+        List(elemType), resultType ->
             let elemTypeClr = elemType |> toClrType
             let resultTypeClr = resultType |> toClrType
             let isEmpty = DlrExpression.Property(listExpr, "IsEmpty")

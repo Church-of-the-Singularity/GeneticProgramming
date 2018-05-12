@@ -1,5 +1,7 @@
 ﻿namespace GeneticProgramming
 
+open System
+
 open Monads.Maybe
 
 open GeneticProgramming.AST
@@ -22,6 +24,15 @@ type PrimitiveMutator(random: System.Random) as this =
     static let incDepth env = { env with Depth = env.Depth + 1 }
     static let randomComplexDepth = incDepth
     static let complexDepth = incDepth
+
+    static let matchItemTypeFilter resultType t = maybe {
+        let! listType = TryList t
+        let! tailHandlerType = TryFunction(listType, resultType)
+        return! TryFunction(t, tailHandlerType)
+    }
+
+    static let randomFunctionArgumentFilter t = TryFunction(t,t)
+    let randomFunctionArgumentType() = Option.getDef Integer (this.RandomType randomFunctionArgumentFilter)
 
     let randomComplexValue =
         [   160, fun env vtype allowRec ->
@@ -72,9 +83,10 @@ type PrimitiveMutator(random: System.Random) as this =
             40, fun env vtype allowRec ->
                 // function application
                 let env = randomComplexDepth env
-                let sourceType = this.RandomType()
+                match this.RandomType(fun t -> TryFunction(t, vtype)) with
+                | None -> None
+                | Some(sourceType) ->
                 let sourceValue = this.RandomValue(sourceType, env)
-                let funcType = Function(sourceType, vtype)
                 let funcValue = this.RandomFunction env sourceType vtype true
                 Some(Apply(funcValue, sourceValue))
 
@@ -89,13 +101,15 @@ type PrimitiveMutator(random: System.Random) as this =
             5, fun env vtype allowRec ->
                 // match list with [] -> empty | head :: tail -> nempty head tail
                 let env = randomComplexDepth env
-                let listElemType = this.RandomType()
-                let list = this.RandomList env listElemType
-                let empty = this.RandomValue(vtype, env)
-                let listType = List listElemType
-                let nemptyTail = this.RandomFunction env (List listElemType) vtype true
-                let nempty = this.RandomFunction env listElemType (Function(listType, vtype)) true
-                Some(Match{ List=list; EmptyCase=empty; HeadTail=nempty })
+
+                maybe {
+                    let! listElemType = this.RandomType(matchItemTypeFilter vtype)
+                    let list = this.RandomList env listElemType
+                    let empty = this.RandomValue(vtype, env)
+                    let listType = ListType listElemType
+                    let nempty = this.RandomFunction env listElemType (Function(listType, vtype)) true
+                    return Match{ List=list; EmptyCase=empty; HeadTail=nempty }
+                }
 
             50, fun env vtype allowRec -> None   ]
         #if DEBUG
@@ -111,8 +125,8 @@ type PrimitiveMutator(random: System.Random) as this =
 
     let randomTypes =
         [   200,    fun () -> Integer;
-            20,     fun () -> List(this.RandomType());
-            10,     fun () -> Function(this.RandomType(), this.RandomType()) ]
+            20,     fun () -> ListType(Option.getDef Integer (this.RandomType TryList));
+            10,     fun () -> Function(randomFunctionArgumentType(), randomFunctionArgumentType()) ]
         |> makeWeightenedGenerator
 
     let randomIntegers =
@@ -146,11 +160,11 @@ type PrimitiveMutator(random: System.Random) as this =
                 IsZero(op1);
         
             1,      fun env ->
-                let elemType = this.RandomType()
+                let (Some elemType) = this.RandomType(matchItemTypeFilter Integer)
                 this.RandomMatch env Integer elemType;
         
             2,      fun env ->
-                let elemType = this.RandomType()
+                let (Some elemType) = this.RandomType(TryList)
                 let list = this.RandomList env elemType
                 Length(list);
                 ]
@@ -169,7 +183,14 @@ type PrimitiveMutator(random: System.Random) as this =
    
     member this.RandomGenerator = this.Random
 
+    [<Obsolete>]
     member this.RandomType() = randomTypes this.Random ()
+    member this.RandomType(predicate: ExpressionType -> bool) =
+        Seq.initN 100
+        |> Seq.map (fun _ -> this.RandomType())
+        |> Seq.tryFind predicate
+    member this.RandomType(predicate: ExpressionType -> ExpressionType option): ExpressionType option =
+        this.RandomType(fun t -> predicate t <> None)
 
     member this.RandomInteger(env: ExpressionGenerationEnvironment) =
         if env.Depth >= this.MaxDepth then
@@ -181,7 +202,7 @@ type PrimitiveMutator(random: System.Random) as this =
         | Some expr -> expr
 
     member this.RandomList env elemType =
-        let listType = List elemType
+        let listType = ListType elemType
         if env.Depth >= this.MaxDepth then
             randomLists this.Random { env with Depth = env.Depth + 1 } elemType
         else
@@ -194,7 +215,6 @@ type PrimitiveMutator(random: System.Random) as this =
         value
 
     member this.RandomFunction env fromType toType allowRec =
-        Debug.Assert(toType <> Unchecked.defaultof<ExpressionType>)
         let funcType = Function(fromType, toType)
         let simple() =
             let varID = byte <| this.Random.Next()
@@ -220,9 +240,8 @@ type PrimitiveMutator(random: System.Random) as this =
         | Integer -> this.RandomInteger(env)
         | List(elemType) -> this.RandomList env elemType
         | Function(fromType, toType) -> this.RandomFunction env fromType toType allowRec
-        | _ -> raise <| System.NotImplementedException()
 
-    member private this.RandomMatch env resultType elemType =
+    member private this.RandomMatch env resultType (elemType: ExpressionType) =
         let list = this.RandomList env elemType
         let empty = this.RandomValue(resultType, env)
         let nemptyType = matchNEmptyHandler elemType resultType

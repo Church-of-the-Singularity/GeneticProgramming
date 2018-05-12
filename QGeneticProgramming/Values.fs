@@ -3,7 +3,7 @@
 open Microsoft.FSharp.Reflection
 open Microsoft.FSharp.Quotations
 
-open GeneticProgramming
+open GeneticProgramming.Types
 
 let rec makeDefaultValue etype =
     match etype with
@@ -19,4 +19,3 @@ let rec makeDefaultValue etype =
         let _, argType = makeDefaultValue argType
         Expr.Lambda(Quotations.Var("_", argType), resultDefaultValue),
         typedefof<_ -> _>.MakeGenericType(argType, resultType)
-    | _ -> failwith "invalid etype"

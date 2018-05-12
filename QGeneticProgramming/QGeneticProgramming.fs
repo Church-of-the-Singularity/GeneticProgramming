@@ -7,6 +7,7 @@ open Microsoft.FSharp.Collections
 open GeneticProgramming
 open GeneticProgramming.AST
 open GeneticProgramming.Execution
+open GeneticProgramming.Types
 
 open QGeneticProgramming
 
@@ -109,7 +110,7 @@ let checkCompilerEquality expr (inputs: int list list) =
             printfn "%A <> %A" dlr unquote
 
 let generateInputs(random: System.Random) =
-    Seq.initInfinite (fun _ -> List Integer)
+    Seq.initInfinite (fun _ -> ListType Integer)
     |> Seq.choose(fun inType ->
         try
             let length = random.Next(64)
@@ -180,7 +181,7 @@ type SortFitness(random) =
         member this.OnNewGeneration() = inputs <- generateInputs(random)
         member this.Fitness(expr) = sortFitness inputs expr
 
-let sortType = Function(List(Integer), List(Integer))
+let sortType = Function(ListType(Integer), ListType(Integer))
 
 //let random = SafeRandom()
 //let mutator = PrimitiveMutator(random)
@@ -333,6 +334,7 @@ let overseerTest() =
 //            worker.Pause <- false
 
 ShortPointers.poolTest()
+GeneticProgramming.Types.isSane()
 
 overseerTest()
 

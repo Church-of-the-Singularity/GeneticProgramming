@@ -2,6 +2,8 @@
 
 open System.Diagnostics
 
+open GeneticProgramming.Types
+
 [<Struct>]
 type BinOpType =
     | Sum | Diff | Mul
@@ -107,14 +109,14 @@ type Expression =
         | BinOp _ | TriOp _
         | IsZero _ -> Integer
 
-        | EmptyList(elemType) -> List(elemType)
+        | EmptyList(elemType) -> ListType(elemType)
 
         | Cons(head, tail) ->
             let headType = head.ComputeType()
             #if DEBUG
-            assert(List(headType) = tail.ComputeType())
+            assert(ListType(headType) = tail.ComputeType())
             #endif
-            List(headType)
+            ListType(headType)
         | Cond(cond,onTrue,onFalse) ->
             let trueType = onTrue.ComputeType()
             #if DEBUG
@@ -131,7 +133,7 @@ type Expression =
             let (List itemType) = list.ComputeType()
             let (Function (handlerItemType, (Function (handlerListType, handlerResult)))) = headTail.ComputeType()
             Debug.Assert((itemType = handlerItemType), "handler item type mismatch")
-            Debug.Assert((handlerListType = List(itemType)), "handler list type mismatch")
+            Debug.Assert((handlerListType = ListType(itemType)), "handler list type mismatch")
             Debug.Assert((handlerResult = emptyType), "handler non-empty does not match empty")
             #endif
             emptyType
