@@ -147,7 +147,7 @@ let sortFitness inputs =
                         |> List.sum
             #if ASYNC
                 }
-            Async.RunSynchronously(task, 500, canceller.Token)
+            Async.RunSynchronously(task, 100, canceller.Token)
             #endif
         with
             | :? System.OperationCanceledException
