@@ -2,14 +2,13 @@
 
 open Microsoft.VisualStudio.TestTools.UnitTesting
 
-open GeneticProgramming
 open GeneticProgramming.AST
 open GeneticProgramming.Execution
 open GeneticProgramming.Types
 
 type ExecutorTestsBase(compilerFactory) =
     static let longTimeout = 30*1000
-    static let timeout = 500
+    static let timeout = if System.Diagnostics.Debugger.IsAttached then 5*60*1000 else 500
 
     let applyTwice (func2: Expression) =
         match func2.ComputeType() with
