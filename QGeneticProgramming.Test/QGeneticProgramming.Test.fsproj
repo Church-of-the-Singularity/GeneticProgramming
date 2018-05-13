@@ -57,6 +57,7 @@
     <Compile Include="ExecutorTests.fs">
       <SubType>Test</SubType>
     </Compile>
+    <None Include="generated.fs" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>

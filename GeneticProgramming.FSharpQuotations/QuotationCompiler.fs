@@ -8,7 +8,7 @@ type QuotationCompiler() =
     member this.Compile(expr: Expression): ICompiledExpression<'args, 'result> =
         let fsexpr = QuotationCompilerInternals.compile expr
         #if DEBUG
-        //let source = fsexpr.Decompile()
+        let source = fsexpr.Decompile()
         #endif
         let func = fsexpr.Eval()
         let compiled = CompiledQuotation<'args, 'result>(func)
