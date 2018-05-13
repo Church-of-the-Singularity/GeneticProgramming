@@ -110,6 +110,14 @@ type Expression =
         | Lambda(_, expr) -> [ expr ]
         | Length list -> [ list ]
         | Term _ -> []
+    
+    member private this.GetUsedVariables(addTo) =
+      match this with
+      | Term var -> var :: addTo
+      | _ ->
+        this.Subexpressions |> List.fold (fun addTo expr -> expr.GetUsedVariables(addTo)) addTo
+
+    member this.GetUsedVariables() = this.GetUsedVariables[]
 
     member this.ComputeType() =
         match this with
@@ -282,7 +290,7 @@ type Expression =
                 Expression = expr } ->
             target.Write "LET "
             if isRec then target.Write "REC "
-            target.WriteLine var
+            target.WriteLine(sprintf "v%d =" var)
             subprint value
             makeIndent()
             target.WriteLine "IN"
@@ -299,7 +307,11 @@ type Expression =
             subprint arg
 
         ()
-        
+
+    override this.ToString() =
+      use writer = new System.IO.StringWriter()
+      this.PrettyPrint(writer, 0)
+      writer.ToString()
 
 and MatchExpression = {
         /// Input list
