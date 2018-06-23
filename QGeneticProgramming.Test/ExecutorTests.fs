@@ -7,8 +7,8 @@ open GeneticProgramming.Execution
 open GeneticProgramming.Types
 
 type ExecutorTestsBase(compilerFactory) =
-    static let longTimeout = 30*1000
-    static let timeout = if System.Diagnostics.Debugger.IsAttached then 5*60*1000 else 500
+    static let longTimeout = 10*1000
+    static let timeout = if System.Diagnostics.Debugger.IsAttached then 60*1000 else 100
 
     let applyTwice (func2: Expression) =
         match func2.ComputeType() with
@@ -248,8 +248,8 @@ type ExecutorTestsBase(compilerFactory) =
         let twoThousands = executor.Execute(timeout, double, 1000).Value
         Assert.AreEqual(2000, twoThousands)
 
-        let twoBillions = executor.Execute(longTimeout, double, 1000000000).Value
-        Assert.AreEqual(2000000000, twoBillions)
+        let twoBillions = executor.Execute(longTimeout, double, 1_000_000).Value
+        Assert.AreEqual(2_000_000, twoBillions)
 
     [<TestMethod>]
     member this.SimpleTailCallsWork() =
@@ -257,8 +257,8 @@ type ExecutorTestsBase(compilerFactory) =
         let even3 = executor.Execute(timeout, isEven, 3).Value
         Assert.AreEqual(box 0, even3)
 
-        let even10000003 = executor.Execute(timeout, isEven, 10000003).Value
-        Assert.AreEqual(box 0, even10000003)
+        let even10003 = executor.Execute(longTimeout, isEven, 10003).Value
+        Assert.AreEqual(box 0, even10003)
 
     [<TestMethod>]
     member this.MatchTailCallSmall() =
@@ -266,7 +266,7 @@ type ExecutorTestsBase(compilerFactory) =
     
     [<TestMethod>]
     member this.MatchTailCallLarge() =
-        List.init 1000000 id |> testListLength
+        List.init 10_000 id |> testListLength
 
     [<TestMethod>]
     member this.ReverseSmall() =
@@ -282,7 +282,7 @@ type ExecutorTestsBase(compilerFactory) =
     
     [<TestMethod>]
     member this.Sort() =
-        testSort [-5; 2; 1; 40; 15; 10]
+        testSort [-5; 2; 1; 40; 15; 10; 11; -20; 127; -127; 42; 11; 3; 7]
 
 module Compilers =
     let unquoteCompilerFactory(): IExpressionCompiler = upcast QuotationCompiler()

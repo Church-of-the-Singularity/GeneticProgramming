@@ -113,7 +113,7 @@ let generateInputs(random: System.Random) =
     Seq.initInfinite (fun _ -> ListType Integer)
     |> Seq.choose(fun inType ->
         try
-            let length = random.Next(64)
+            let length = random.Next(7)
             let list = List.init length (fun _ -> random.Next())
             Some(list)
         with _ -> None)
