@@ -193,7 +193,7 @@ type ExecutorTestsBase(compilerFactory) =
     let testListLength (list: int list) =
         let len = List.length list
         let executor: IExpressionExecutor<int list, int> = createExecutor()
-        let computed = executor.Execute(timeout, customLength Integer, list).Value
+        let computed = executor.Execute(longTimeout, customLength Integer, list).Value
         Assert.AreEqual(len, computed)
 
     let testReverse (list: int list) =
@@ -226,6 +226,11 @@ type ExecutorTestsBase(compilerFactory) =
         let executor: IExpressionExecutor<int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, customSort, a).Value
         Assert.AreEqual(sorted, computed)
+
+    // warm up
+    do
+        createExecutor().Execute(longTimeout, customSort, [3;1])
+        |> ignore
 
     [<TestMethod>]
     member this.DoubleIsCorrect() =
