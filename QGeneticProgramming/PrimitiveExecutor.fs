@@ -54,11 +54,13 @@ type PrimitiveExecutor<'i, 'o>(compiler: IExpressionCompiler, ?cache, ?cacheLimi
 
     interface IExpressionExecutor<'i, 'o> with
         member this.Execute(timeLimit, expr, input) =
-//            use canceller = new System.Threading.CancellationTokenSource()
-//            canceller.CancelAfter(timeLimit)
+            use canceller = new System.Threading.CancellationTokenSource()
+            canceller.CancelAfter(timeLimit)
+            
 
             #if ASYNC
             let task = async {
+                    Cancellation.token.Value <- canceller.Token
                     //let fsexpr = expr.Compile()
                     //let func = fsexpr.Eval()
                     return
