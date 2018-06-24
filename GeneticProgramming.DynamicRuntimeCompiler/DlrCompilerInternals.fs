@@ -12,9 +12,7 @@ let private emptyTranslationEnvironment =
     {   Variables = Map.empty
         TailCallJump = None }
 
-open GeneticProgramming
 open GeneticProgramming.AST
-open GeneticProgramming.DynamicRuntimeCompiler
 open GeneticProgramming.Types
 
 let mutable memoryLimit = System.Int64.MaxValue

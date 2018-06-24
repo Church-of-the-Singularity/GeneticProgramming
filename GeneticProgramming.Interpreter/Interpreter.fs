@@ -52,7 +52,7 @@ type Interpreter() =
             else
                 let aValue = eval a
                 let bValue = eval b
-                operator (unbox a) (unbox b)
+                operator (unbox aValue) (unbox bValue)
                 |> box
 
         | Cond(cond, onTrue, onFalse) ->
