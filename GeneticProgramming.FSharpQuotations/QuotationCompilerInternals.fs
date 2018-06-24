@@ -11,6 +11,7 @@ open Swensen.Unquote
 
 open GeneticProgramming
 open GeneticProgramming.AST
+open GeneticProgramming.Types
 
 let private stackCheck =
     <@@ Cancellation.callCheck() @@>
@@ -38,8 +39,6 @@ let private listCases concreteList =
     // let concreteList = genericList.MakeGenericType[| elemType |]
     let [| empty; cons |] = FSharpType.GetUnionCases(concreteList)
     empty, cons
-
-let toClrType (exprType: ExpressionType) = exprType.ToClrType()
 
 type private TailCallInfo =
     {   Var: TermInfo
@@ -119,7 +118,7 @@ let rec private compileRec this env =
     | Zero -> doReturn <@@ 0 @@>
 
     | Lambda(term, expr) ->
-        let variable = Var(sprintf "v%d" term.Term, term.Type.ToClrType())
+        let variable = Var(sprintf "v%d" term.Term, toClrType term.Type)
         Expr.Lambda(variable, compile expr)
         |> doReturn
 
@@ -150,7 +149,7 @@ let rec private compileRec this env =
             |> doReturn
 
     | EmptyList(t) ->
-        let empty, _ = listCases((List t).ToClrType())
+        let empty, _ = listCases((ListType t).ToClrType())
         Expr.NewUnionCase(empty, [])
         |> doReturn
 
@@ -257,11 +256,11 @@ let rec private compileRec this env =
         List(elemType), resultType ->
             let elemTypeClr = elemType.ToClrType()
             let resultTypeClr = resultType.ToClrType()
-            let tailTypeClr = toClrType(List elemType)
+            let tailTypeClr = toClrType(ListType elemType)
 
             let nemptyExpr =
                 let localHead = { Term = byte matchHead; Type = elemType }
-                let localTail = { Term = byte -matchTail; Type = List elemType }
+                let localTail = { Term = byte -matchTail; Type = ListType elemType }
                 let reducedBody = Apply(Apply(nempty, Term localHead), Term localTail) |> AST.reduce
                 let body = compilePass <| reducedBody
 

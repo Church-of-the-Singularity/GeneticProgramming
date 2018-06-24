@@ -2,24 +2,24 @@
 
 open Microsoft.VisualStudio.TestTools.UnitTesting
 
-open GeneticProgramming
 open GeneticProgramming.AST
 open GeneticProgramming.Execution
+open GeneticProgramming.Types
 
 type ExecutorTestsBase(compilerFactory) =
-    static let longTimeout = 30*1000
-    static let timeout = 500
+    static let longTimeout = 10*1000
+    static let timeout = if System.Diagnostics.Debugger.IsAttached then 60*1000 else 100
 
     let applyTwice (func2: Expression) =
         match func2.ComputeType() with
         | Function(argType, Function(argType', _)) when argType = argType'->
-            let v = int 'v'
+            let v = byte 'v'
             let vVar = makeTerm v argType
             Lambda(termOfTuple(v, argType), Apply(Apply(func2, vVar), vVar))
         | _ -> invalidArg "func2" "Must be of type 'a -> 'a -> 'b"
 
     let double =
-        let a, b, s, v = int 'a', int 'b', int 's', int 'v'
+        let a, b, s, v = byte 'a', byte 'b', byte 's', byte 'v'
         let sumType = Function(Integer, Function(Integer, Integer))
         let aVar, bVar, sVar, vVar = makeTerm a Integer, makeTerm b Integer, makeTerm s sumType, makeTerm v Integer
 
@@ -32,10 +32,10 @@ type ExecutorTestsBase(compilerFactory) =
         // let s = \a -> \b -> if a=0 then b else s (a-1) (b+1)
         // let s = \a -> if a = 0 then \b -> b else \b -> s(a-1) (b+1)
         applyTwice sumLetRec 
-        //Lambda({ Term = int 'v'; Type = Integer}, Apply(Apply(sumLetRec, vVar), vVar))
+        //Lambda({ Term = byte 'v'; Type = Integer}, Apply(Apply(sumLetRec, vVar), vVar))
 
     let isEven =
-        let n,e = int 'n', int 'e'
+        let n,e = byte 'n', byte 'e'
         let evenType = Function(Integer, Integer)
         let nVar, eVar = makeTerm n Integer, makeTerm e evenType
 
@@ -51,9 +51,9 @@ type ExecutorTestsBase(compilerFactory) =
 
     let customFold =
       function Function(stateType, Function(elemType, stateType')) as folderType when stateType = stateType' ->
-                let fold, folder, state, list = int 'f', int 'F', int 's', int 'l'
-                let head, tail = int 'h', int 't'
-                let foldType = ExpressionType.CurriedFunction([folderType; stateType; List elemType], stateType)
+                let fold, folder, state, list = byte 'f', byte 'F', byte 's', byte 'l'
+                let head, tail = byte 'h', byte 't'
+                let foldType = ExpressionType.CurriedFunction([folderType; stateType; ListType elemType], stateType)
 //                let rec fold folder state list =
 //                    match list with
 //                    | [] -> state
@@ -66,21 +66,21 @@ type ExecutorTestsBase(compilerFactory) =
                         foldTerm
                         [   folderTerm
                             applyMultiple folderTerm [stateTerm; makeTerm head elemType]
-                            makeTerm tail (List elemType)]
+                            makeTerm tail (ListType elemType)]
                 let lambdaBody =
-                    Match{  List = makeTerm list (List elemType);
+                    Match{  List = makeTerm list (ListType elemType);
                             EmptyCase = stateTerm;
                             HeadTail = Lambda(termOfTuple(head, elemType),
-                                        Lambda(termOfTuple(tail, List elemType), ``rec``)) }
+                                        Lambda(termOfTuple(tail, ListType elemType), ``rec``)) }
                 let body =
                     Lambda(termOfTuple(folder, folderType),
                         Lambda(termOfTuple(state, stateType),
-                            Lambda(termOfTuple(list, List elemType), lambdaBody)))
+                            Lambda(termOfTuple(list, ListType elemType), lambdaBody)))
 
                 Let{ Recursive = true; Term = fold; Value = body; Expression = foldTerm }
 
     let customLength elemType =
-        let l, u = int 'l', int 'u'
+        let l, u = byte 'l', byte 'u'
         // let length = fold (fun l u -> l + 1) 0
         let fold =
             ExpressionType.CurriedFunction([Integer; elemType], Integer)
@@ -91,54 +91,90 @@ type ExecutorTestsBase(compilerFactory) =
         applyMultiple fold [folder; Zero]
     
     let customReverse elemType =
-        let r, e = int 'r', int 'e'
+        let r, e = byte 'r', byte 'e'
         // let rev = List.fold (fun r e -> e :: r) []
         let fold =
-            ExpressionType.CurriedFunction([List elemType; elemType], List elemType)
+            ExpressionType.CurriedFunction([ListType elemType; elemType], ListType elemType)
             |> customFold
         let folder =
-            curriedLambda [ termOfTuple(r, List elemType); termOfTuple(e, elemType) ]
-                          (Cons (makeTerm e elemType, makeTerm r (List elemType)))
+            curriedLambda [ termOfTuple(r, ListType elemType); termOfTuple(e, elemType) ]
+                          (Cons (makeTerm e elemType, makeTerm r (ListType elemType)))
         applyMultiple fold [folder; EmptyList elemType]
 
     let customFilter elemType =
-        let cond, r, e = int 'c', int 'r', int 'e'
-        let list = int 'l'
+        let cond, r, e = byte 'c', byte 'r', byte 'e'
+        let list = byte 'l'
         let condType = Function(elemType, Integer)
         let filter =
             fun cond list ->
                 List.rev(List.fold (fun r e -> if cond e then e :: r else r) [] list)
-        let resultTerm = makeTerm r (List elemType)
+        let resultTerm = makeTerm r (ListType elemType)
         let elemTerm = makeTerm e elemType
         let fold =
-            ExpressionType.CurriedFunction([List elemType; elemType], List elemType)
+            ExpressionType.CurriedFunction([ListType elemType; elemType], ListType elemType)
             |> customFold
         let filterExpr =
             Cond(Apply(makeTerm cond condType, elemTerm),
                  Cons(elemTerm, resultTerm),
                  resultTerm)
         let folder =
-            curriedLambda [ termOfTuple(r, List elemType); termOfTuple(e, elemType) ]
+            curriedLambda [ termOfTuple(r, ListType elemType); termOfTuple(e, elemType) ]
                           filterExpr
-        curriedLambda [ termOfTuple(cond, condType); termOfTuple(list, List elemType) ]
+        curriedLambda [ termOfTuple(cond, condType); termOfTuple(list, ListType elemType) ]
             (Apply(  customReverse elemType,
-                    applyMultiple fold [folder; EmptyList elemType; makeTerm list (List elemType)]))
+                    applyMultiple fold [folder; EmptyList elemType; makeTerm list (ListType elemType)]))
 
     let customAppend elemType =
-        let res, e, a, b = int 'r', int 'e', int 'a', int 'b'
+        let res, e, a, b = byte 'r', byte 'e', byte 'a', byte 'b'
         // fun a b -> List.fold(fun res e -> e :: res) b (List.rev a)
         let fold =
-            ExpressionType.CurriedFunction([List elemType; elemType], List elemType)
+            ExpressionType.CurriedFunction([ListType elemType; elemType], ListType elemType)
             |> customFold
         let folder =
-            curriedLambda [ termOfTuple(res, List elemType); termOfTuple(e, elemType) ]
-                          (Cons (makeTerm e elemType, makeTerm res (List elemType)))
+            curriedLambda [ termOfTuple(res, ListType elemType); termOfTuple(e, elemType) ]
+                          (Cons (makeTerm e elemType, makeTerm res (ListType elemType)))
         let rev = customReverse elemType
-        curriedLambda[ termOfTuple(a, List elemType); termOfTuple(b, List elemType) ]
+        curriedLambda[ termOfTuple(a, ListType elemType); termOfTuple(b, ListType elemType) ]
             (applyMultiple fold
                 [   folder
-                    makeTerm b (List elemType)
-                    Apply(rev, makeTerm a (List elemType)) ])
+                    makeTerm b (ListType elemType)
+                    Apply(rev, makeTerm a (ListType elemType)) ])
+    
+    let customSort =
+        let vars = TermAllocator()
+        let list = ListType(Integer)
+        let int = Integer
+
+        let input = vars.MakeVar(list)
+        let sort = vars.MakeVar(Function(list, list))
+        let h = vars.MakeVar(int)
+        let t = vars.MakeVar(list)
+        let filter = vars.MakeVar(ExpressionType.CurriedFunction([Function(int, int); list], list))
+        let lessEq = vars.MakeVar(list)
+        let greater = vars.MakeVar(list)
+        let v = vars.MakeVar(int)
+
+        Let{ Term = sort.Term; Recursive = true;
+             Expression = Term(sort);
+             // actual body
+             Value = Lambda(input, Match{ List = Term(input); EmptyCase = Term(input);
+                HeadTail = Lambda(h, Lambda(t,
+                    Let { Term = filter.Term; Recursive = false; Value = customFilter int;
+                    Expression =
+                    Let { Term = lessEq.Term; Recursive = false; Value = applyMultiple
+                        (Term filter) [ Lambda(v, IsLess (Term v) (Term h)); Term t ];
+                    Expression =
+                    Let { Term = greater.Term; Recursive = false; Value = applyMultiple
+                        (Term filter) [ Lambda(v, Not(IsLess(Term v) (Term h))); Term t ];
+                    Expression =
+                    applyMultiple (customAppend int)
+                        [ (Apply(Term(sort), Term(lessEq)));
+                          (Cons(Term(h), Apply(Term(sort), Term(greater))))]
+                    |> checkType
+                    } |> checkType } |> checkType } |> checkType
+                 ))
+            })
+        } |> checkType
 
 //    let customQsort =
 //        
@@ -157,7 +193,7 @@ type ExecutorTestsBase(compilerFactory) =
     let testListLength (list: int list) =
         let len = List.length list
         let executor: IExpressionExecutor<int list, int> = createExecutor()
-        let computed = executor.Execute(timeout, customLength Integer, list).Value
+        let computed = executor.Execute(longTimeout, customLength Integer, list).Value
         Assert.AreEqual(len, computed)
 
     let testReverse (list: int list) =
@@ -169,8 +205,8 @@ type ExecutorTestsBase(compilerFactory) =
     let testCustomFilter(list: int list) =
         let filtered = List.filter(fun e -> e > 0) list
         let filter = Lambda(
-                        termOfTuple(1, Integer),
-                        BinOp(Less, Zero, makeTerm 1 Integer))
+                        termOfTuple(1uy, Integer),
+                        BinOp(Less, Zero, makeTerm 1uy Integer))
         let filterNonPositive = Apply(customFilter Integer, filter)
         let executor: IExpressionExecutor<int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, filterNonPositive, list).Value
@@ -184,6 +220,17 @@ type ExecutorTestsBase(compilerFactory) =
         let executor: IExpressionExecutor<int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, selfAppend, a).Value
         Assert.AreEqual(sum, computed)
+    
+    let testSort(a: int list) =
+        let sorted = List.sort a
+        let executor: IExpressionExecutor<int list, int list> = createExecutor()
+        let computed = executor.Execute(timeout, customSort, a).Value
+        Assert.AreEqual(sorted, computed)
+
+    // warm up
+    do
+        createExecutor().Execute(longTimeout, customSort, [3;1])
+        |> ignore
 
     [<TestMethod>]
     member this.DoubleIsCorrect() =
@@ -206,8 +253,8 @@ type ExecutorTestsBase(compilerFactory) =
         let twoThousands = executor.Execute(timeout, double, 1000).Value
         Assert.AreEqual(2000, twoThousands)
 
-        let twoBillions = executor.Execute(longTimeout, double, 1000000000).Value
-        Assert.AreEqual(2000000000, twoBillions)
+        let twoBillions = executor.Execute(longTimeout, double, 1_000_000).Value
+        Assert.AreEqual(2_000_000, twoBillions)
 
     [<TestMethod>]
     member this.SimpleTailCallsWork() =
@@ -215,8 +262,8 @@ type ExecutorTestsBase(compilerFactory) =
         let even3 = executor.Execute(timeout, isEven, 3).Value
         Assert.AreEqual(box 0, even3)
 
-        let even10000003 = executor.Execute(timeout, isEven, 10000003).Value
-        Assert.AreEqual(box 0, even10000003)
+        let even10003 = executor.Execute(longTimeout, isEven, 10003).Value
+        Assert.AreEqual(box 0, even10003)
 
     [<TestMethod>]
     member this.MatchTailCallSmall() =
@@ -224,7 +271,7 @@ type ExecutorTestsBase(compilerFactory) =
     
     [<TestMethod>]
     member this.MatchTailCallLarge() =
-        List.init 1000000 id |> testListLength
+        List.init 10_000 id |> testListLength
 
     [<TestMethod>]
     member this.ReverseSmall() =
@@ -237,6 +284,10 @@ type ExecutorTestsBase(compilerFactory) =
     [<TestMethod>]
     member this.AppendSmall() =
         testCustomAppend [-3; 0; -1; 42; 11]
+    
+    [<TestMethod>]
+    member this.Sort() =
+        testSort [-5; 2; 1; 40; 15; 10; 11; -20; 127; -127; 42; 11; 3; 7]
 
 module Compilers =
     let unquoteCompilerFactory(): IExpressionCompiler = upcast QuotationCompiler()

@@ -2,6 +2,8 @@
 
 open System.Diagnostics
 
+open GeneticProgramming.Types
+
 open ShortPointers
 
 [<Struct>]
@@ -32,6 +34,14 @@ type TermInfo =
     {   Term: byte
         Type: ExpressionType    }
     override this.ToString() = sprintf "v%d: %O" this.Term this.Type
+
+type TermAllocator() =
+    let mutable current = 0uy
+
+    member i.MakeVar(varType) =
+        let result = { Term = current; Type = varType }
+        current <- Checked.(+) current 1uy
+        result
 
 type ERef<'P> = TypedPointer<'P, Expression<'P>>
 and [<Struct>] Expression<'P> =
@@ -128,6 +138,14 @@ type PooledExpression<'P> =
         | Lambda(_, expr) -> [ expr ]
         | Length list -> [ list ]
         | Term _ -> []
+    
+    member private this.GetUsedVariables(addTo) =
+      match this with
+      | Term var -> var :: addTo
+      | _ ->
+        this.Subexpressions |> List.fold (fun addTo expr -> expr.GetUsedVariables(addTo)) addTo
+
+    member this.GetUsedVariables() = this.GetUsedVariables[]
 
     member this.ComputeType() =
         match this.Expr with
@@ -135,14 +153,14 @@ type PooledExpression<'P> =
         | BinOp _ | TriOp _
         | IsZero _ -> Integer
 
-        | EmptyList(elemType) -> List(elemType)
+        | EmptyList(elemType) -> ListType(elemType)
 
         | Cons(head, tail) ->
             let headType = head.ComputeType()
             #if DEBUG
-            assert(List(headType) = tail.ComputeType())
+            assert(ListType(headType) = tail.ComputeType())
             #endif
-            List(headType)
+            ListType(headType)
         | Cond(cond,onTrue,onFalse) ->
             let trueType = onTrue.ComputeType()
             #if DEBUG
@@ -159,7 +177,7 @@ type PooledExpression<'P> =
             let (List itemType) = list.ComputeType()
             let (Function (handlerItemType, (Function (handlerListType, handlerResult)))) = headTail.ComputeType()
             Debug.Assert((itemType = handlerItemType), "handler item type mismatch")
-            Debug.Assert((handlerListType = List(itemType)), "handler list type mismatch")
+            Debug.Assert((handlerListType = ListType(itemType)), "handler list type mismatch")
             Debug.Assert((handlerResult = emptyType), "handler non-empty does not match empty")
             #endif
             emptyType
@@ -300,7 +318,7 @@ type PooledExpression<'P> =
                 Expression = expr } ->
             target.Write "LET "
             if isRec then target.Write "REC "
-            target.WriteLine var
+            target.WriteLine(sprintf "v%d =" var)
             subprint value
             makeIndent()
             target.WriteLine "IN"
@@ -318,6 +336,12 @@ type PooledExpression<'P> =
 
         ()
 
+    override this.ToString() =
+      use writer = new System.IO.StringWriter()
+      this.PrettyPrint(writer, 0)
+      writer.ToString()
+
+
 module IntegerConstants =
     let two = BinOp(Sum, One, One)
     let minusOne = BinOp(Diff, Zero, One)
@@ -332,11 +356,16 @@ module IntegerConstants =
 
 let Minus a b = BinOp(Diff, a, b)
 let Plus a b = BinOp(Sum, a, b)
+let Not a = IsZero(a)
+let IsLess a b = BinOp(Less, a, b)
 
 let termOfTuple (term, ``type``) = { Term = term; Type = ``type`` }
 let makeTerm term ``type`` = Term{ Term = term; Type = ``type`` }
 
 let typeOf (expr: PooledExpression<_>) = expr.ComputeType()
+let checkType expr =
+    typeOf expr |> ignore
+    expr
 
 let getSubexpressions (expr: PooledExpression<_>) = expr.Subexpressions
 

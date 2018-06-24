@@ -48,7 +48,6 @@
     <Compile Include="ExpressionType.fs" />
     <Compile Include="IDataModel.fs" />
     <Compile Include="AST.fs" />
-    <Compile Include="Types.fs" />
     <Compile Include="Execution.fs" />
     <Compile Include="SAT.fs" />
     <Compile Include="GeneticProgramming.fs" />

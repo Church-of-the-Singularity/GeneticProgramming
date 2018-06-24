@@ -6,7 +6,7 @@ type olist = obj list
 
 type private InterpreterState =
     {   Random: System.Random;
-        Bindings: Map<int, obj>;    }
+        Bindings: Map<byte, obj>;    }
 
     static member Create() =
         {   Random = System.Random();
@@ -52,7 +52,7 @@ type Interpreter() =
             else
                 let aValue = eval a
                 let bValue = eval b
-                operator (unbox a) (unbox b)
+                operator (unbox aValue) (unbox bValue)
                 |> box
 
         | Cond(cond, onTrue, onFalse) ->

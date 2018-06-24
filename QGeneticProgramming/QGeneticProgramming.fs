@@ -7,6 +7,7 @@ open Microsoft.FSharp.Collections
 open GeneticProgramming
 open GeneticProgramming.AST
 open GeneticProgramming.Execution
+open GeneticProgramming.Types
 
 open QGeneticProgramming
 
@@ -109,10 +110,10 @@ let checkCompilerEquality expr (inputs: int list list) =
             printfn "%A <> %A" dlr unquote
 
 let generateInputs(random: System.Random) =
-    Seq.initInfinite (fun _ -> List Integer)
+    Seq.initInfinite (fun _ -> ListType Integer)
     |> Seq.choose(fun inType ->
         try
-            let length = random.Next(64)
+            let length = random.Next(7)
             let list = List.init length (fun _ -> random.Next())
             Some(list)
         with _ -> None)
@@ -146,7 +147,7 @@ let sortFitness inputs =
                         |> List.sum
             #if ASYNC
                 }
-            Async.RunSynchronously(task, 500, canceller.Token)
+            Async.RunSynchronously(task, 100, canceller.Token)
             #endif
         with
             | :? System.OperationCanceledException
@@ -180,7 +181,7 @@ type SortFitness(random) =
         member this.OnNewGeneration() = inputs <- generateInputs(random)
         member this.Fitness(expr) = sortFitness inputs expr
 
-let sortType = Function(List(Integer), List(Integer))
+let sortType = Function(ListType(Integer), ListType(Integer))
 
 //let random = SafeRandom()
 //let mutator = PrimitiveMutator(random)
@@ -250,6 +251,9 @@ let overseerTest() =
 
     let workerCount = cliOptions.WorkerCount
 
+    let masterRandom = System.Random()
+    let masterFitness: IFitness<Expression, int64> = upcast SortFitness(masterRandom)
+
     let generation, index =
         if System.IO.File.Exists(saveFile) then
             printf "loading..."
@@ -258,13 +262,10 @@ let overseerTest() =
             gen, idx
         else
             printfn "started from scratch"
-            let random = System.Random()
-            let mutator = PrimitiveMutator(random)
-            let breeder = PrimitiveInterBreeder(random)
+            let mutator = PrimitiveMutator(masterRandom)
+            let breeder = PrimitiveInterBreeder(masterRandom)
 
-            let fitness = SortFitness(random)
-
-            let strategy = PrimitiveStrategy(mutator, breeder, fitness)
+            let strategy = PrimitiveStrategy(mutator, breeder, masterFitness)
             let itemsToGenerate = strategy.GenerationSize * workerCount
             let initialGeneration = List.init strategy.GenerationSize (fun _ -> mutator.RandomValue(sortType))
             initialGeneration, 0L
@@ -297,7 +298,10 @@ let overseerTest() =
 
         printfn "time is out"
 
-        let best = workers |> Array.map (fun w -> w.Best) |> Array.min
+        let best =
+            workers
+            |> Seq.collect (fun w -> List.map masterFitness.Fitness w.CurrentGeneration)
+            |> Seq.min
         let gens = workers |> Array.map (fun w -> w.ProcessedCount)
         let generation = workers |> Seq.collect (fun w -> w.CurrentGeneration) |> List.ofSeq
         let processedFromStart = workers |> Seq.sumBy(fun w -> w.ProcessedCount)
@@ -333,6 +337,7 @@ let overseerTest() =
 //            worker.Pause <- false
 
 ShortPointers.poolTest()
+GeneticProgramming.Types.isSane()
 
 overseerTest()
 
