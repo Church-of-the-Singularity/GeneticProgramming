@@ -58,6 +58,7 @@
     <Compile Include="PrimitiveMutator.fs" />
     <Compile Include="PrimitiveInterBreeder.fs" />
     <Compile Include="PrimitiveSolver.fs" />
+    <Compile Include="ShortDataModel.fs" />
     <Content Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
