@@ -1,34 +1,56 @@
 ﻿namespace GeneticProgramming.Interpreter
 
 open GeneticProgramming.AST
+open GeneticProgramming.ShortDataModel
+open GeneticProgramming.Execution
+open Lost.Pointers
+open Lost.Pointers.Pools
 
 type olist = obj list
 
 type private InterpreterState =
     {   Random: System.Random;
-        Bindings: Map<byte, obj>;    }
+        Bindings: obj[];    }
 
     static member Create() =
         {   Random = System.Random();
-            Bindings = Map.empty;   }
+            Bindings = Array.create 256 null;   }
 
-    member this.Bind(term, obj) =
-        {   this with Bindings = Map.add term obj this.Bindings }
+    member this.Bind(term: byte, obj, func) =
+      let original = this.Bindings.[int term]
+      this.Bindings.[int term] <- obj
+      let result = func()
+      this.Bindings.[int term] <- original
+      result
+
+    member this.Reset() = this.Bindings.Initialize()
+
+    member this.Clone() =
+      { Random = this.Random;
+        Bindings = downcast this.Bindings.Clone(); }
     
 
-type Interpreter() =
-    member private this.Evaluate(expr: Expression) =
-        let state = InterpreterState.Create()
+type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
+    let dataPool = StructPool.makePoolGeneric<uint16, uint16> 4096
+    
+    let state = InterpreterState.Create()
+
+    member private this.Evaluate(expr: ERef<'P>) =
+        state.Reset()
         this.Evaluate(expr, state)
 
-    member private this.Evaluate(expr, state: InterpreterState): obj =
-        let eval expression = this.Evaluate(expression, state)
+    member private this.Evaluate(eref, state: InterpreterState): obj =
+        let eval eref = this.Evaluate(eref, state)
+        let expr = Ref pool eref
         match expr with
         | Zero -> box 0
         | One -> box 1
         | Rand max ->
             let maxValue = eval max
             box <| state.Random.Next(unbox maxValue)
+        
+        | Term term ->
+          state.Bindings.[int term.Term]
 
         | BinOp(op, a, b) ->
             let operator =
@@ -70,9 +92,10 @@ type Interpreter() =
             else
                 box 0 |> box
 
-        | EmptyList exprType -> upcast []
+        | EmptyList exprType -> upcast ShortList.empty dataPool
 
         | Apply(fn, v) ->
+            Cancellation.callCheck()
             let func = eval fn
             let arg = eval v
             (unbox func) arg
@@ -80,18 +103,16 @@ type Interpreter() =
         | Cons(head, tail) ->
             let headValue = eval head
             let tailValue = eval tail
-            headValue :: unbox tailValue
+            ShortList.cons dataPool headValue (unbox tailValue)
             |> box
 
         | Lambda(term, body) ->
-            fun o ->
-                let innerState = state.Bind(term.Term, o)
-                this.Evaluate(body, innerState)
+            fun o -> state.Bind(term.Term, o, fun () -> this.Evaluate(body, state))
             |> box
 
         | Length(listExpr) ->
             let listValue = eval listExpr
-            List.length (unbox listValue)
+            ShortList.length dataPool (unbox listValue)
             |> box
 
         | Let{  Recursive = false;
@@ -99,11 +120,29 @@ type Interpreter() =
                 Value = valueExpr;
                 Expression = exprExpr;  } ->
             let value = eval valueExpr
-            let innerState = state.Bind(term, value)
-            this.Evaluate(exprExpr, innerState)
+            state.Bind(term, value, fun() -> this.Evaluate(exprExpr, state))
 
         | Let{  Recursive = true;
                 Term = term;
-                Value = valueExpr;
+                Value = valueRef;
                 Expression = exprExpr;  } ->
-            notImplemented()
+            let valueExpr = Ref pool valueRef
+            match valueExpr with
+            | Lambda(argTerm, body) ->
+              let environment = state.Clone()
+              let rec func arg =
+                environment.Bind(term, func, fun () ->
+                environment.Bind(argTerm.Term, arg, fun () ->
+                  eval body))
+              state.Bind(term, func, fun() -> eval exprExpr)
+            | _ -> raise(System.NotSupportedException())
+        
+        | Match {   List = list
+                    EmptyCase = empty
+                    HeadTail = nempty   } ->
+            ShortList.switch dataPool list
+              (fun () -> eval empty)
+              (fun head tail ->
+                Cancellation.callCheck()
+                let func = eval nempty
+                (unbox func) (eval head) (eval tail))
