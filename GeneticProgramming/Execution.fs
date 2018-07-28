@@ -2,6 +2,7 @@
 
 open GeneticProgramming
 open GeneticProgramming.AST
+open Lost.Into
 
 module Cancellation =
     open System.Threading
@@ -22,8 +23,8 @@ module Cancellation =
         if newValue &&& 0xFFF = 0 then
             checkCancel()
 
-type IExpressionExecutor<'i, 'o> =
-    abstract Execute: timeLimit:int * expr: Expression * input: 'i ->
+type IExpressionExecutor<'P, 'i, 'o when 'P :> IInto<int>> =
+    abstract Execute: timeLimit:int * expr: Expression<'P> * input: 'i ->
                        ComputationResult.ComputationResult<'o, exn>
 
 type ICompiledExpression<'args, 'result> =
@@ -34,6 +35,6 @@ type ICompiledExpression<'args, 'result> =
 
 type IExpressionCompiler =
     /// Compiles specified expression
-    abstract Compile: expr: Expression -> ICompiledExpression<'args, 'result>
+    abstract Compile: expr: Expression<'P> -> ICompiledExpression<'args, 'result>
     /// Compiler data module (for translating parameters)
     abstract DataModel: IDataModel

@@ -1,5 +1,7 @@
 ﻿namespace GeneticProgramming
 
+open GeneticProgramming.AST
+
 type IRandomReset =
     abstract Reset: unit -> unit
 
@@ -25,16 +27,17 @@ type IFitness<'i, 'fv> =
     abstract OnNewGeneration: unit -> unit
     abstract Fitness: 'i -> 'fv
 
-open GeneticProgramming.AST
+open GeneticProgramming.AST.Pooled
+open Lost.Into
 
 type GenerationsCollectedEventArgs(generationCount) =
     inherit System.EventArgs()
 
     member this.GenerationCount = generationCount
 
-type ISolver =
+type ISolver<'P when 'P :> IInto<int>> =
     abstract GenerationCount: int64
     abstract IterationCompleted: IEvent<System.EventHandler, System.EventArgs>
-    abstract CurrentGeneration: Expression list
-    abstract LoadGeneration: Expression list * ?index:int64 -> unit
+    abstract CurrentGeneration: ERef<'P> list
+    abstract LoadGeneration: ERef<'P> list * ?index:int64 -> unit
     abstract Continue: unit -> unit

@@ -1,10 +1,14 @@
-﻿module GeneticProgramming.AST
+﻿[<AutoOpen>]
+module GeneticProgramming.AST.AST
 
 open System.Diagnostics
+open System.IO
+
+open Lost.Pointers
+open Lost.Pointers.Pools
 
 open GeneticProgramming.Types
-
-open ShortPointers
+open Operators
 
 [<Struct>]
 type BinOpType =
@@ -74,285 +78,290 @@ and [<Struct>] Expression<'P> =
     | Lambda of arg:TermInfo * body:ERef<'P>
     | Apply of func:ERef<'P> * applyTo:ERef<'P>
 
-    member this.NodeCount() = this.NodeCount(0)
+    member this.Subexpressions =
+      match this with
+      | Zero | One -> []
+      | Rand limit -> [limit]
+      | BinOp(_, a, b) -> [a; b]
+      | TriOp(_, a, b, c) -> [a; b; c]
+      | IsZero value -> [value]
+      | EmptyList _ -> []
+      | Cons(h, t) -> [h; t]
+      | Cond(cond, onTrue, onFalse) -> [cond; onTrue; onFalse]
 
-    member private this.NodeCount(acc) =
-        match this with
-        | Zero | One | Term _ | EmptyList _ -> acc + 1
-        | Rand a | IsZero a | Length a | Lambda (_, a) -> a.NodeCount(acc + 1)
-        | BinOp(_, a, b) | Cons (a, b) 
-        | Let { Value = a
-                Expression = b }
-        | Apply (a, b)  -> b.NodeCount(a.NodeCount(acc + 1))
-        | TriOp (_, a,b,c) | Cond(a,b,c)
-        | Match {   List = a
-                    EmptyCase = b
-                    HeadTail = c } -> c.NodeCount(b.NodeCount(a.NodeCount(acc + 1)))
+      | Match{    List = list
+                  EmptyCase = empty
+                  HeadTail = nempty } ->
+          [ list; empty; nempty ]
+
+      | Let{  Value = value
+              Expression = expr } ->
+          [ value; expr ]
+
+      | Apply(func, value) -> [ func; value ]
+      | Lambda(_, expr) -> [ expr ]
+      | Length list -> [ list ]
+      | Term _ -> []
+
+    interface IManaged<'P, Expression<'P>> with
+      member this.GetReferences() =
+        notImplemented()
+        seq []
+
 
 and MatchExpression<'P> = {
         /// Input list
-        List:       Expression<'P>;
+        List:       ERef<'P>;
         /// Expression, computed if list is empty
-        EmptyCase:  Expression<'P>;
+        EmptyCase:  ERef<'P>;
         /// Function, that is of form 'a -> 'a list -> 'b.
         /// It will accept head and tail, and return result value
-        HeadTail:   Expression<'P>;
+        HeadTail:   ERef<'P>;
     }
 
 and LetExpression<'P> = {
         /// Bound value
-        Value:  Expression<'P>;
+        Value:  ERef<'P>;
         /// Expression to be computed with bound term
-        Expression: Expression<'P>;
+        Expression: ERef<'P>;
         Recursive:  bool;
         /// Bound term
         Term: byte;
     }
 
-type PooledExpression<'P> =
-    { Expr: Expression<'P>;
-      Pool: StructPool<'P, Expression<'P>>; }
-    
+let subexpressions pool (eref: ERef<'P>) =
+  let expr = Ref pool eref
+  expr.Subexpressions
 
-    member this.Subexpressions =
-        match this.Expr with
-        | Zero | One -> []
-        | Rand limit -> [limit]
-        | BinOp(_, a, b) -> [a; b]
-        | TriOp(_, a, b, c) -> [a; b; c]
-        | IsZero value -> [value]
-        | EmptyList _ -> []
-        | Cons(h, t) -> [h; t]
-        | Cond(cond, onTrue, onFalse) -> [cond; onTrue; onFalse]
+let rec private getUsedVariablesImpl pool addTo eref =
+  let expr = Ref pool eref
+  match expr with
+  | Term var -> var :: addTo
+  | _ ->
+    subexpressions pool eref
+    |> List.fold (getUsedVariablesImpl pool) addTo
 
-        | Match{    List = list
-                    EmptyCase = empty
-                    HeadTail = nempty } ->
-            [ list; empty; nempty ]
+let getUsedVariables pool = getUsedVariablesImpl pool []
 
-        | Let{  Value = value
-                Expression = expr } ->
-            [ value; expr ]
+let rec private NodeCount(pool: #IPool<'P, Expression<'P>>)
+                         (expr: ERef<'P>)  acc : int =
+  let nodeCount = NodeCount pool
+  let expr = Ref pool expr
+  match expr with
+  | Zero | One | Term _ | EmptyList _ -> acc + 1
+  | Rand a | IsZero a | Length a | Lambda (_, a) ->
+    nodeCount a (acc + 1)
+  | BinOp(_, a, b) | Cons (a, b) 
+  | Let { Value = a
+          Expression = b }
+  | Apply (a, b) ->
+    acc + 1
+    |> nodeCount a
+    |> nodeCount b
+  | TriOp (_, a,b,c) | Cond(a,b,c)
+  | Match {   List = a
+              EmptyCase = b
+              HeadTail = c } ->
+    acc + 1
+    |> nodeCount a
+    |> nodeCount b
+    |> nodeCount c
 
-        | Apply(func, value) -> [ func; value ]
-        | Lambda(_, expr) -> [ expr ]
-        | Length list -> [ list ]
-        | Term _ -> []
-    
-    member private this.GetUsedVariables(addTo) =
-      match this with
-      | Term var -> var :: addTo
-      | _ ->
-        this.Subexpressions |> List.fold (fun addTo expr -> expr.GetUsedVariables(addTo)) addTo
+let nodeCount pool expr = NodeCount pool expr 0
 
-    member this.GetUsedVariables() = this.GetUsedVariables[]
+let rec computeType pool eref =
+  let expr = Ref pool eref
+  let computeType = computeType pool
+  match expr with
+  | Zero | One | Rand _
+  | BinOp _ | TriOp _
+  | IsZero _ -> Integer
 
-    member this.ComputeType() =
-        match this.Expr with
-        | Zero | One | Rand _
-        | BinOp _ | TriOp _
-        | IsZero _ -> Integer
+  | EmptyList(elemType) -> ListType(elemType)
 
-        | EmptyList(elemType) -> ListType(elemType)
+  | Cons(head, tail) ->
+      let headType = computeType head
+      #if DEBUG
+      assert(ListType(headType) = computeType tail)
+      #endif
+      ListType(headType)
+  | Cond(cond,onTrue,onFalse) ->
+      let trueType = computeType onTrue
+      #if DEBUG
+      assert(computeType cond = Integer)
+      let falseType = computeType onFalse
+      assert(falseType = trueType)
+      #endif
+      trueType
+  | Match{ List = list
+           EmptyCase = empty
+           HeadTail = headTail } ->
+      let emptyType = computeType empty
+      #if DEBUG
+      let (List itemType) = computeType list
+      let (Function (handlerItemType, (Function (handlerListType, handlerResult)))) = computeType headTail
+      Debug.Assert((itemType = handlerItemType), "handler item type mismatch")
+      Debug.Assert((handlerListType = ListType(itemType)), "handler list type mismatch")
+      Debug.Assert((handlerResult = emptyType), "handler non-empty does not match empty")
+      #endif
+      emptyType
 
-        | Cons(head, tail) ->
-            let headType = head.ComputeType()
-            #if DEBUG
-            assert(ListType(headType) = tail.ComputeType())
-            #endif
-            ListType(headType)
-        | Cond(cond,onTrue,onFalse) ->
-            let trueType = onTrue.ComputeType()
-            #if DEBUG
-            assert(cond.ComputeType() = Integer)
-            let falseType = onFalse.ComputeType()
-            assert(falseType = trueType)
-            #endif
-            trueType
-        | Match{ List = list
-                 EmptyCase = empty
-                 HeadTail = headTail } ->
-            let emptyType = empty.ComputeType()
-            #if DEBUG
-            let (List itemType) = list.ComputeType()
-            let (Function (handlerItemType, (Function (handlerListType, handlerResult)))) = headTail.ComputeType()
-            Debug.Assert((itemType = handlerItemType), "handler item type mismatch")
-            Debug.Assert((handlerListType = ListType(itemType)), "handler list type mismatch")
-            Debug.Assert((handlerResult = emptyType), "handler non-empty does not match empty")
-            #endif
-            emptyType
+  | Length _ -> Integer
 
-        | Length _ -> Integer
+  | Term{ Type = t } -> t
+  | Let{ Expression = expr } -> computeType expr
+  | Lambda({ Type = varType }, result) -> Function(varType, computeType result)
+  | Apply(func, arg) ->
+      match computeType func with
+      | Function(argType, targetType) ->
+          #if DEBUG
+          assert(argType = computeType arg)
+          #endif
+          targetType
+      | _ -> failwith "bad function type"
 
-        | Term{ Type = t } -> t
-        | Let{ Expression = expr } -> expr.ComputeType()
-        | Lambda({ Type = varType }, result) -> Function(varType, result.ComputeType())
-        | Apply(func, arg) ->
-            match func.ComputeType() with
-            | Function(argType, targetType) ->
-                #if DEBUG
-                assert(argType = arg.ComputeType())
-                #endif
-                targetType
-            | _ -> failwith "bad function type"
+let rec getFreeVariables pool eref =
+  let expr = Ref pool eref
+  let getFreeVariables = getFreeVariables pool
+  match expr with
+  | Zero | One -> Map.empty
 
-    member this.GetFreeVariables() =
-        match this.Expr with
-        | Zero | One -> Map.empty
+  | Rand limit -> getFreeVariables limit
 
-        | Rand limit -> limit.GetFreeVariables()
+  | BinOp (_, a, b) ->
+      getFreeVariables a
+      |> Map.merge (getFreeVariables b)
 
-        | BinOp (_, a, b) ->
-            a.GetFreeVariables()
-            |> Map.merge (b.GetFreeVariables())
+  | TriOp (_, a, b, c)
+  | Cond (a, b, c) ->
+      getFreeVariables a
+      |> Map.merge (getFreeVariables b)
+      |> Map.merge (getFreeVariables c)
 
-        | TriOp (_, a, b, c)
-        | Cond (a, b, c) ->
-            a.GetFreeVariables()
-            |> Map.merge (b.GetFreeVariables())
-            |> Map.merge (c.GetFreeVariables())
+  | IsZero limit -> getFreeVariables limit
 
-        | IsZero limit -> limit.GetFreeVariables()
+  | EmptyList _ -> Map.empty
 
-        | EmptyList _ -> Map.empty
+  | Cons(head, tail) ->
+      getFreeVariables head
+      |> Map.merge (getFreeVariables tail)
 
-        | Cons(head, tail) ->
-            head.GetFreeVariables()
-            |> Map.merge (tail.GetFreeVariables())
+  | Match{    List = list
+              EmptyCase = empty
+              HeadTail = nempty } ->
+      getFreeVariables list
+      |> Map.merge (getFreeVariables empty)
+      |> Map.merge (getFreeVariables nempty)
 
-        | Match{    List = list
-                    EmptyCase = empty
-                    HeadTail = nempty } ->
-            list.GetFreeVariables()
-            |> Map.merge (empty.GetFreeVariables())
-            |> Map.merge (nempty.GetFreeVariables())
+  | Length list -> getFreeVariables list
 
-        | Length list -> list.GetFreeVariables()
+  | Term{ Term = var; Type = t} -> Map.add var t Map.empty
 
-        | Term{ Term = var; Type = t} -> Map.add var t Map.empty
+  | Let{  Recursive = false
+          Term = var
+          Value = value
+          Expression = expr } ->
+      let exprFree =
+          getFreeVariables expr
+          |> Map.remove var
+      getFreeVariables value
+      |> Map.merge exprFree
 
-        | Let{  Recursive = false
-                Term = var
-                Value = value
-                Expression = expr } ->
-            let exprFree =
-                expr.GetFreeVariables()
-                |> Map.remove var
-            value.GetFreeVariables()
-            |> Map.merge exprFree
+  | Let{  Recursive = true
+          Term = var
+          Value = value
+          Expression = expr } ->
+      getFreeVariables value
+      |> Map.merge (getFreeVariables expr)
+      |> Map.remove var
 
-        | Let{  Recursive = true
-                Term = var
-                Value = value
-                Expression = expr } ->
-            value.GetFreeVariables()
-            |> Map.merge (expr.GetFreeVariables())
-            |> Map.remove var
+  | Lambda({ Term = var }, result) ->
+      getFreeVariables result
+      |> Map.remove var
 
-        | Lambda({ Term = var }, result) ->
-            result.GetFreeVariables()
-            |> Map.remove var
+  | Apply(func, arg) ->
+      getFreeVariables func
+      |> Map.merge (getFreeVariables arg)
 
-        | Apply(func, arg) ->
-            func.GetFreeVariables()
-            |> Map.merge (arg.GetFreeVariables())
+let rec prettyPrint pool eref (target: TextWriter) indent =
+  let makeIndent() =
+      for i = 0 to indent-1 do
+          target.Write '\t'
+  makeIndent()
+  let next = indent + 1
+  let subprint e = prettyPrint pool e target next
+  let expr = Ref pool eref
+  match expr with
+  | Zero -> target.WriteLine '0'
+  | One -> target.WriteLine '1'
+  | Rand e ->
+      target.WriteLine "RND"
+      subprint e
+  | BinOp(op, left, right) ->
+      target.WriteLine op.Char
+      subprint left
+      subprint right
+  | TriOp(op, left, right, fallback) ->
+      target.WriteLine op.Char
+      subprint left
+      subprint right
+      subprint fallback
+  | Cond(cond, onTrue, onFalse) ->
+      target.WriteLine "COND?"
+      subprint cond
+      subprint onTrue
+      subprint onFalse
+  | IsZero e ->
+      target.WriteLine "NOT"
+      subprint e
+  | EmptyList _ -> target.WriteLine "[]"
+  | Cons(head, tail) ->
+      target.WriteLine "CONS"
+      subprint head
+      subprint tail
 
-    member this.PrettyPrint(target: System.IO.TextWriter, indent) =
-        let makeIndent() =
-            for i = 0 to indent-1 do
-                target.Write '\t'
-        makeIndent()
-        let next = indent + 1
-        let subprint (e: Expression) = e.PrettyPrint(target, next)
-        match this with
-        | Zero -> target.WriteLine '0'
-        | One -> target.WriteLine '1'
-        | Rand e ->
-            target.WriteLine "RND"
-            subprint e
-        | BinOp(op, left, right) ->
-            target.WriteLine op.Char
-            subprint left
-            subprint right
-        | TriOp(op, left, right, fallback) ->
-            target.WriteLine op.Char
-            subprint left
-            subprint right
-            subprint fallback
-        | Cond(cond, onTrue, onFalse) ->
-            target.WriteLine "COND?"
-            subprint cond
-            subprint onTrue
-            subprint onFalse
-        | IsZero e ->
-            target.WriteLine "NOT"
-            subprint e
-        | EmptyList _ -> target.WriteLine "[]"
-        | Cons(head, tail) ->
-            target.WriteLine "CONS"
-            subprint head
-            subprint tail
+  | Match{    List = list
+              EmptyCase = empty
+              HeadTail = nempty } ->
+      target.WriteLine "MATCH"
+      subprint list
+      makeIndent()
+      target.WriteLine "WITH EMPTY:"
+      subprint empty
+      makeIndent()
+      target.WriteLine "NEMPTY:"
+      subprint nempty
 
-        | Match{    List = list
-                    EmptyCase = empty
-                    HeadTail = nempty } ->
-            target.WriteLine "MATCH"
-            subprint list
-            makeIndent()
-            target.WriteLine "WITH EMPTY:"
-            subprint empty
-            makeIndent()
-            target.WriteLine "NEMPTY:"
-            subprint nempty
+  | Length list ->
+      target.WriteLine "LEN"
+      subprint list
 
-        | Length list ->
-            target.WriteLine "LEN"
-            subprint list
+  | Term t ->
+      target.WriteLine t
 
-        | Term t ->
-            target.WriteLine t
+  | Let{  Recursive = isRec
+          Term = var
+          Value = value
+          Expression = expr } ->
+      target.Write "LET "
+      if isRec then target.Write "REC "
+      target.WriteLine(sprintf "v%d =" var)
+      subprint value
+      makeIndent()
+      target.WriteLine "IN"
+      subprint expr
 
-        | Let{  Recursive = isRec
-                Term = var
-                Value = value
-                Expression = expr } ->
-            target.Write "LET "
-            if isRec then target.Write "REC "
-            target.WriteLine(sprintf "v%d =" var)
-            subprint value
-            makeIndent()
-            target.WriteLine "IN"
-            subprint expr
+  | Lambda(var, result) ->
+      target.Write var
+      target.WriteLine " =>"
+      subprint result
 
-        | Lambda(var, result) ->
-            target.Write var
-            target.WriteLine " =>"
-            subprint result
+  | Apply(func, arg) ->
+      target.WriteLine "APPLY"
+      subprint func
+      subprint arg
 
-        | Apply(func, arg) ->
-            target.WriteLine "APPLY"
-            subprint func
-            subprint arg
-
-        ()
-
-    override this.ToString() =
-      use writer = new System.IO.StringWriter()
-      this.PrettyPrint(writer, 0)
-      writer.ToString()
-
-
-module IntegerConstants =
-    let two = BinOp(Sum, One, One)
-    let minusOne = BinOp(Diff, Zero, One)
-
-    let rec make n =
-        if n = 0 then Zero
-        elif n = 1 then One
-        elif n = -1 then BinOp(Diff, Zero, One)
-        elif n % 2 = 0 then BinOp(Mul, two, make(n/2))
-        elif n < 0 then BinOp(Diff, make(n + 1), One)
-        else BinOp(Sum, One, make(n - 1))
+  ()
 
 let Minus a b = BinOp(Diff, a, b)
 let Plus a b = BinOp(Sum, a, b)
@@ -362,103 +371,44 @@ let IsLess a b = BinOp(Less, a, b)
 let termOfTuple (term, ``type``) = { Term = term; Type = ``type`` }
 let makeTerm term ``type`` = Term{ Term = term; Type = ``type`` }
 
-let typeOf (expr: PooledExpression<_>) = expr.ComputeType()
-let checkType expr =
-    typeOf expr |> ignore
-    expr
+let getSubexpressions (expr: Expression<_>) = expr.Subexpressions
 
-let getSubexpressions (expr: PooledExpression<_>) = expr.Subexpressions
-
-let getRecSubexpressions expr =
+let rec getRecSubexpressions pool expr =
     let children = getSubexpressions expr
-    children @ List.collect getSubexpressions children
+    children @ List.collect (fun childRef ->
+      let child = Ref pool childRef
+      getRecSubexpressions pool child) children
 
-let getFreeVariables (expr: Expression) = expr.GetFreeVariables()
-
-let computeType (expr: Expression) = expr.ComputeType()
-
-/// TODO: Check, that this function is used correctly. It is NOT recursive!
-let map func expr =
-    match expr with
-    | Zero -> Zero
-    | One -> One
-    | Rand limit -> Rand(func limit)
-    | BinOp(op, a, b) -> BinOp(op, func a, func b)
-    | TriOp(op, a, b, c) -> TriOp(op, func a, func b, func c)
-    | IsZero v -> IsZero(func v)
-    | EmptyList t -> EmptyList t
-    | Cons(h, t) -> Cons(func h, func t)
-    | Cond(cond, onTrue, onFalse) -> Cond(func cond, func onTrue, func onFalse)
-    | Match{    List = list
-                EmptyCase = empty
-                HeadTail = nempty } ->
-        Match{  List = func list
-                EmptyCase = func empty
-                HeadTail = func nempty }
-
-    | Let{  Recursive = isRec
-            Term = var
-            Value = value
-            Expression = expr } ->
-        Let{    Recursive = isRec
-                Term = var
-                Value = func value
-                Expression = func expr  }
-
-    | Apply(f, v) -> Apply(func f, func v)
-    | Lambda(term, expr) -> Lambda(term, func expr)
-    | Length list -> Length(func list)
-    | Term(term) -> Term(term)
-
-let rec curriedLambda args body =
-    match args with
-    | [] -> body
-    | arg :: restArgs -> Lambda(arg, curriedLambda restArgs body)
-
-let rec applyMultiple expr args =
-    match args with
-    | [] -> expr
-    | arg :: restArgs -> applyMultiple (Apply(expr, arg)) restArgs
-
-let rec private (|MultiApplicationRev|_|) expression =
+let rec private (|MultiApplicationRev|_|) pool expression =
     match expression with
-    | Apply(expr, value) ->
+    | Apply(eref, value) ->
+        let expr = Ref pool eref
         match expr with
-        | MultiApplicationRev(func, args) -> Some(func, value :: args)
+        | MultiApplicationRev pool (func, args) ->
+          Some(func, value :: args)
         | _ -> Some(expr, [value])
     | _ -> None
 
-let (|MultiApplication|_|) expression =
+let (|MultiApplication|_|) pool expression =
     match expression with
-    | MultiApplicationRev(func, args) -> Some(func, List.rev args)
+    | MultiApplicationRev pool (func, args) -> Some(func, List.rev args)
     | _ -> None
 
-let replace term replaceWith body =
-    let rec replacer = function
-        | Term(t) when t = term -> replaceWith
-        | expr -> map replacer expr
-    replacer body
-
-let rec reduce expression =
-    match expression with
-    | MultiApplication(Lambda(term, body), arg :: restArgs) ->
-        let newBody = replace term arg body
-        reduce(applyMultiple newBody restArgs)
-    | _ -> expression
-
-let rec (|TermApplication|_| ) expression =
+let rec (|TermApplication|_| ) pool eref =
+    let expression = Ref pool eref
     match expression with
     | Term(term) -> Some(term, [])
-    | Apply(expr, value) ->
-        match expr with
-        | TermApplication(term, args) -> Some(term, value :: args)
+    | Apply(eref, value) ->
+        match eref with
+        | TermApplication pool (term, args) -> Some(term, value :: args)
         | _ -> None
     | _ -> None
 
-let rec (|MultiArityLambda|_|) expression =
+let rec (|MultiArityLambda|_|) pool eref =
+    let expression = Ref pool eref
     match expression with
     | Lambda(term, body) ->
         match body with
-        | MultiArityLambda(vars, body) -> Some(term :: vars, body)
+        | MultiArityLambda pool (vars, body) -> Some(term :: vars, body)
         | _ -> Some([term], body)
     | _ -> None

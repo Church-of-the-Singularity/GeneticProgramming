@@ -44,10 +44,10 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="ShortPointers.fs" />
     <Compile Include="ExpressionType.fs" />
     <Compile Include="IDataModel.fs" />
     <Compile Include="AST.fs" />
+    <Compile Include="PooledAst.fs" />
     <Compile Include="Execution.fs" />
     <Compile Include="SAT.fs" />
     <Compile Include="GeneticProgramming.fs" />
@@ -72,6 +72,13 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Numerics" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Deps\ShortPointers\src\Lost.ShortPointers.fsproj">
+      <Name>Lost.ShortPointers</Name>
+      <Project>{9e8e1778-ee57-4e2e-8709-5e4d3835e3af}</Project>
+      <Private>True</Private>
+    </ProjectReference>
   </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
 	     Other similar extension points exist, see Microsoft.Common.targets.

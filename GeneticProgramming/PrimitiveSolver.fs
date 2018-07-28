@@ -1,8 +1,10 @@
 ﻿namespace GeneticProgramming
 
+open Lost.Into
 open GeneticProgramming.AST
 
-type PrimitiveSolver<'a>(strategy: IEvolutionStrategy<Expression list, 'a>) =
+
+type PrimitiveSolver<'a, 'P when 'P :> IInto<int>>(strategy: IEvolutionStrategy<ERef<'P> list, 'a>) =
     let mutable generation = 0L
     let mutable currentGeneration = []
     let mutable isRunning = false
@@ -24,7 +26,7 @@ type PrimitiveSolver<'a>(strategy: IEvolutionStrategy<Expression list, 'a>) =
 
         this.Run()
 
-    interface ISolver with
+    interface ISolver<'P> with
         member this.GenerationCount = this.GenerationCount
         member this.CurrentGeneration = this.CurrentGeneration
         member this.IterationCompleted = this.IterationCompleted

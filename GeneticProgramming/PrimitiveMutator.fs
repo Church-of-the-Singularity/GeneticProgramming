@@ -5,13 +5,16 @@ open System
 open Monads.Maybe
 
 open GeneticProgramming.AST
+open GeneticProgramming.AST.Pooled
 open GeneticProgramming.GenerationUtils
 open GeneticProgramming.ExpressionGenerationEnvironment
 open GeneticProgramming.Types
 open System.Diagnostics
+open Lost.Into
+open Lost.Pointers.Pools
 
 [<System.Serializable>]
-type PrimitiveMutator(random: System.Random) as this =
+type PrimitiveMutator<'P when 'P :> IInto<int>>(random: System.Random, pool: ExpressionPool<'P>) as this =
     inherit Randomized(random)
 
     static let probabilityPrecision = 1000000
@@ -32,6 +35,10 @@ type PrimitiveMutator(random: System.Random) as this =
     }
 
     static let randomFunctionArgumentFilter t = TryFunction(t,t)
+
+    let computeType expr = computeType pool.Underlying expr
+    let GcNew = GcNew pool
+
     let randomFunctionArgumentType() = Option.getDef Integer (this.RandomType randomFunctionArgumentFilter)
 
     let randomComplexValue =
@@ -116,7 +123,8 @@ type PrimitiveMutator(random: System.Random) as this =
         |> List.map (fun (weight, gen) ->
             let verifyingGen env vtype allocRec =
                 let expr = gen env vtype allocRec
-                let exprType = Option.map computeType expr
+                let eref = Option.map GcNew expr
+                let exprType = Option.map computeType eref
                 expr
             weight, verifyingGen
         )
@@ -195,16 +203,19 @@ type PrimitiveMutator(random: System.Random) as this =
     member this.RandomInteger(env: ExpressionGenerationEnvironment) =
         if env.Depth >= this.MaxDepth then
             randomIntegers this.Random { env with Depth = env.Depth + 1 }
+            |> GcNew
         else
         let complexEnv = complexDepth env
         match randomComplexValue this.Random complexEnv Integer false with
         | None -> randomIntegers this.Random env
         | Some expr -> expr
+        |> GcNew
 
     member this.RandomList env elemType =
         let listType = ListType elemType
         if env.Depth >= this.MaxDepth then
             randomLists this.Random { env with Depth = env.Depth + 1 } elemType
+            |> GcNew
         else
         let value =
             let complexEnv = complexDepth env
@@ -213,6 +224,7 @@ type PrimitiveMutator(random: System.Random) as this =
             | Some expr -> expr
         // assert(toExpressionType value.Type = Some(List elemType))
         value
+        |> GcNew
 
     member this.RandomFunction env fromType toType allowRec =
         let funcType = Function(fromType, toType)
@@ -223,12 +235,14 @@ type PrimitiveMutator(random: System.Random) as this =
             Lambda({ Term = varID; Type = fromType}, value)
         if env.Depth >= this.MaxDepth then
             simple()
+            |> GcNew
         else
         let complexEnv = complexDepth env
         match randomComplexValue this.Random complexEnv funcType allowRec with
         | None ->
             simple()
         | Some expr -> expr
+        |> GcNew
 
     member this.RandomValue(valueType, ?env, ?allowRec) =
         let env =
@@ -252,11 +266,11 @@ type PrimitiveMutator(random: System.Random) as this =
             HeadTail = nempty;
         }
 
-    member this.Mutate(mutationProbability, expr: Expression, ?genEnv) =
+    member this.Mutate(mutationProbability, eref: ERef<'P>, ?genEnv) =
         System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack()
 
         #if DEBUG
-        let exprType = computeType expr
+        let exprType = computeType eref
         #endif
 
         let genEnv = defaultArg genEnv ExpressionGenerationEnvironment.Empty
@@ -270,6 +284,7 @@ type PrimitiveMutator(random: System.Random) as this =
                 #endif
                 mutated
             let mutateDefault = mutate { genEnv with Depth = genEnv.Depth + 1 }
+            let expr = Ref pool.Underlying eref
             match expr with
             | Apply(f, v) ->
                 Apply(mutateDefault f, mutateDefault v)
@@ -278,7 +293,7 @@ type PrimitiveMutator(random: System.Random) as this =
                     Term = var;
                     Value = value;
                     Expression = code   } ->
-                let vtype = typeOf value
+                let vtype = computeType value
                 let innerEnv = declare { Term = var; Type = vtype } false genEnv
                 Let{
                     Recursive = false;
@@ -290,7 +305,7 @@ type PrimitiveMutator(random: System.Random) as this =
                     Term = var;
                     Value = value;
                     Expression = code   } ->
-                let vtype = typeOf value
+                let vtype = computeType value
                 let varEnv = declare { Term = var; Type = vtype } true genEnv
                 let innerEnv = declare { Term = var; Type = vtype } false genEnv
                 Let{
@@ -332,21 +347,23 @@ type PrimitiveMutator(random: System.Random) as this =
             | Zero -> Zero
 
             | Rand(v) -> Rand(mutateDefault v)
+
+            |> GcNew
             
         else
-            let valueType = typeOf expr
+            let valueType = computeType eref
             let newValue = this.RandomValue(valueType, genEnv)
             newValue
 
-    member this.Mutate(mutationProbability: float, expr, ?genEnv) =
+    member this.Mutate(mutationProbability: float, expr: ERef<_>, ?genEnv) =
         let genEnv = defaultArg genEnv ExpressionGenerationEnvironment.Empty
         this.Mutate(int <| (mutationProbability * float probabilityPrecision),
                      expr, genEnv)
 
-    interface IMutator<Expression> with
+    interface IMutator<ERef<'P>> with
         member this.Mutate expr =
             let mutable mutated = this.Mutate(probabilityPrecision / 10, expr)
-            while mutated.NodeCount() > 160 do
+            while nodeCount pool.Underlying mutated > 160 do
                 mutated <- this.Mutate(probabilityPrecision / 10, expr)
             #if DEBUG
             assert(computeType mutated = computeType expr)

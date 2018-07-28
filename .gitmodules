@@ -1,0 +1,3 @@
+[submodule "Deps/ShortPointers"]
+	path = Deps/ShortPointers
+	url = https://github.com/lostmsu/ShortPointers.git
