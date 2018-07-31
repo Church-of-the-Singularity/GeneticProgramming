@@ -13,9 +13,10 @@ module ShortList =
       (pool: IPool<Ptr<'T>, 'T>)
       gc = genericNull<Ptr<'T>, 'T>
 
-  let cons pool gc head tail =
+  let rec cons pool gc head tail =
     match GcNewArray pool gc [| head; getAddress tail |] with
     | None -> oom()
+    | Some address when Pointer.isNull address -> cons pool gc head tail
     | Some address -> address
 
   let private tail<'T when 'T: struct and 'T:> System.IConvertible> 
