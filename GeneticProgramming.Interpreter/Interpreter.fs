@@ -12,7 +12,8 @@ type olist = obj list
 type DataType = int16
 
 type private UntypedDataPtr = Ptr<DataType>
-type private DataPtr = TypedPointer<Ptr<DataType>, DataType>
+type private DataPtr = TypedPointer<UntypedDataPtr, DataType>
+type private IDataPtr = ITypedPointer<UntypedDataPtr, DataType>
 
 [<Struct>]
 type private Value =
@@ -36,6 +37,7 @@ module private Tools =
   let inline toDataType value = int16 value
   let word value = Word(value)
   let lambda value = Lambda(value)
+  let toTypedPtr value = DataPtr(UntypedDataPtr.op_Explicit(value))
 
 type private InterpreterState =
     {   Random: System.Random;
@@ -67,8 +69,11 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
     member private this.GetDataRoots() =
       environmentsStack
       |> Seq.collect (fun env -> env.Bindings)
-      |> Seq.filterType<DataPtr>
-      |> Seq.cast<ITypedPointer<Ptr<DataType>, DataType>>
+      |> Seq.choose(function Lambda _ -> None
+                           | Word word when word >= LanguagePrimitives.GenericZero && int word < dataPool.Size -> Some word
+                           | _ -> None)
+      |> Seq.collect(fun word -> if int word + 1 < dataPool.Size then [word; word + LanguagePrimitives.GenericOne] else [word])
+      |> Seq.map (fun address -> upcast toTypedPtr address : IDataPtr)
 
     member private this.DataGC = unmanagedGC (this.GetDataRoots())
 
