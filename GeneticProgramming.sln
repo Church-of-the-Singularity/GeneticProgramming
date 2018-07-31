@@ -40,7 +40,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{5D3BE615
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Deps", "Deps", "{5CB2B413-DCF9-4E76-BA47-2094ED8671BE}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Lost.ShortPointers", "Deps\ShortPointers\src\Lost.ShortPointers.fsproj", "{9E8E1778-EE57-4E2E-8709-5E4D3835E3AF}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Lost.ShortPointers", "Deps\ShortPointers\src\Lost.ShortPointers.fsproj", "{9E8E1778-EE57-4E2E-8709-5E4D3835E3AF}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
