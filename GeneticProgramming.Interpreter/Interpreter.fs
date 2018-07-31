@@ -5,16 +5,45 @@ open GeneticProgramming.ShortDataModel
 open GeneticProgramming.Execution
 open Lost.Pointers
 open Lost.Pointers.Pools
+open Lost.Pointers.StructPool
+open System.Collections.Generic
 
 type olist = obj list
+type DataType = int16
+
+type private UntypedDataPtr = Ptr<DataType>
+type private DataPtr = TypedPointer<Ptr<DataType>, DataType>
+
+[<Struct>]
+type private Value =
+  | Word of word:DataType
+  | Lambda of func:(Value -> Value)
+
+  static member Zero = Word(LanguagePrimitives.GenericZero)
+  static member op_Implicit(value: DataType) = Word(value)
+  static member op_Implicit(value: Value -> Value) = Lambda(value)
+
+  member this.int =
+    let (Word word) = this
+    word
+  member this.ptr: UntypedDataPtr = UntypedDataPtr.op_Explicit this.int
+  member this.lambda =
+    let (Lambda lambda) = this
+    lambda
+
+[<AutoOpen>]
+module private Tools =
+  let inline toDataType value = int16 value
+  let word value = Word(value)
+  let lambda value = Lambda(value)
 
 type private InterpreterState =
     {   Random: System.Random;
-        Bindings: obj[];    }
+        Bindings: Value[];    }
 
     static member Create() =
         {   Random = System.Random();
-            Bindings = Array.create 256 null;   }
+            Bindings = Array.create 256 Value.Zero;   }
 
     member this.Bind(term: byte, obj, func) =
       let original = this.Bindings.[int term]
@@ -28,44 +57,55 @@ type private InterpreterState =
     member this.Clone() =
       { Random = this.Random;
         Bindings = downcast this.Bindings.Clone(); }
-    
 
 type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
-    let dataPool = StructPool.makePoolGeneric<uint16, uint16> 4096
-    
+    let environmentsStack = Stack()
+    let dataPool = StructPool.makePoolGeneric<DataType, DataType> 4096
     let state = InterpreterState.Create()
+    do environmentsStack.Push state
+
+    member private this.GetDataRoots() =
+      environmentsStack
+      |> Seq.collect (fun env -> env.Bindings)
+      |> Seq.filterType<DataPtr>
+      |> Seq.cast<ITypedPointer<Ptr<DataType>, DataType>>
+
+    member private this.DataGC = unmanagedGC (this.GetDataRoots())
 
     member private this.Evaluate(expr: ERef<'P>) =
         state.Reset()
+        dataPool.Reset()
         this.Evaluate(expr, state)
 
-    member private this.Evaluate(eref, state: InterpreterState): obj =
+    member private this.Evaluate(eref, state: InterpreterState): Value =
         let eval eref = this.Evaluate(eref, state)
         let expr = Ref pool eref
         match expr with
-        | Zero -> box 0
-        | One -> box 1
+        | Zero -> word(LanguagePrimitives.GenericZero<DataType>)
+        | One -> word(LanguagePrimitives.GenericOne<DataType>)
         | Rand max ->
             let maxValue = eval max
-            box <| state.Random.Next(unbox maxValue)
+            state.Random.Next(int maxValue.int)
+            |> toDataType
+            |> word
         
         | Term term ->
           state.Bindings.[int term.Term]
 
         | BinOp(op, a, b) ->
-            let operator =
+            let operator: DataType -> DataType -> DataType =
                 match op with
                 | Sum -> (+)
                 | Diff -> (-)
                 | Mul -> (*)
-                | Less -> fun x y -> if x < y then 1 else 0
+                | Less -> fun x y -> if x < y then LanguagePrimitives.GenericOne else LanguagePrimitives.GenericZero
             let aValue = eval a
             let bValue = eval b
-            operator (unbox a) (unbox b)
-            |> box
+            operator aValue.int bValue.int
+            |> word
 
         | TriOp(op, a, b, onZero) ->
-            let operator: int -> int -> int =
+            let operator: DataType -> DataType -> DataType =
                 match op with
                 | Div -> (/)
                 | Mod -> (%)
@@ -74,25 +114,25 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
             else
                 let aValue = eval a
                 let bValue = eval b
-                operator (unbox aValue) (unbox bValue)
-                |> box
+                operator aValue.int bValue.int
+                |> word
 
         | Cond(cond, onTrue, onFalse) ->
             let condValue = eval cond
-            if unbox condValue <> 0 then
+            if condValue.int <> LanguagePrimitives.GenericZero then
                 eval onTrue
             else
                 eval onFalse
-            |> box
 
         | IsZero(v) ->
             let value = eval v
-            if unbox value = 0 then
-                box 1
+            if value.int = LanguagePrimitives.GenericZero then
+                LanguagePrimitives.GenericOne<DataType>
             else
-                box 0 |> box
+                LanguagePrimitives.GenericZero<DataType>
+            |> word
 
-        | EmptyList exprType -> upcast ShortList.empty dataPool
+        | EmptyList exprType -> word(getAddress(getAddress(ShortList.empty<DataType> dataPool this.DataGC)))
 
         | Apply(fn, v) ->
             Cancellation.callCheck()
@@ -103,17 +143,20 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
         | Cons(head, tail) ->
             let headValue = eval head
             let tailValue = eval tail
-            ShortList.cons dataPool headValue (unbox tailValue)
-            |> box
+            ShortList.cons dataPool this.DataGC headValue.int tailValue.ptr
+            |> getAddress
+            |> getAddress
+            |> word
 
-        | Lambda(term, body) ->
+        | Expression.Lambda(term, body) ->
             fun o -> state.Bind(term.Term, o, fun () -> this.Evaluate(body, state))
-            |> box
+            |> lambda
 
         | Length(listExpr) ->
-            let listValue = eval listExpr
-            ShortList.length dataPool (unbox listValue)
-            |> box
+            let listValue = unbox(eval listExpr)
+            ShortList.length dataPool listValue
+            |> toDataType
+            |> word
 
         | Let{  Recursive = false;
                 Term = term;
@@ -128,21 +171,28 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
                 Expression = exprExpr;  } ->
             let valueExpr = Ref pool valueRef
             match valueExpr with
-            | Lambda(argTerm, body) ->
+            | Expression.Lambda(argTerm, body) ->
               let environment = state.Clone()
+              environmentsStack.Push(environment)
               let rec func arg =
-                environment.Bind(term, func, fun () ->
+                environment.Bind(term, lambda func, fun () ->
                 environment.Bind(argTerm.Term, arg, fun () ->
                   eval body))
-              state.Bind(term, func, fun() -> eval exprExpr)
+              let result = state.Bind(term, lambda func, fun() -> eval exprExpr)
+              environmentsStack.Pop() |> ignore
+              result
+
             | _ -> raise(System.NotSupportedException())
         
         | Match {   List = list
                     EmptyCase = empty
                     HeadTail = nempty   } ->
-            ShortList.switch dataPool list
+            let listPtr = DataPtr((eval list).ptr)
+            ShortList.switch dataPool listPtr
               (fun () -> eval empty)
               (fun head tail ->
                 Cancellation.callCheck()
-                let func = eval nempty
-                (unbox func) (eval head) (eval tail))
+                let func = (eval nempty).lambda
+                let headDone = func (word head)
+                let tailPtr = getAddress(getAddress tail)
+                headDone.lambda (word tailPtr))
