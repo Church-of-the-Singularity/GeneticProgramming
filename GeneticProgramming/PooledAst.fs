@@ -21,7 +21,8 @@ type ExpressionPool<'P when 'P :> IInto<int>> =
 
 let private _new_ pool value =
   let roots = Seq.cast pool.Roots
-  match GcNew pool.Pool roots value with
+  let gc = managedGC roots
+  match GcNew pool.Pool gc value with
   | Some ptr -> ptr
   | _ -> System.OutOfMemoryException() |> raise
 

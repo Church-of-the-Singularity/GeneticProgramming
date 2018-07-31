@@ -11,25 +11,25 @@ module ShortList =
 
   let inline empty<'T when 'T: struct and 'T:> System.IConvertible>
       (pool: IPool<Ptr<'T>, 'T>)
-      (roots: unit -> TypedPointer<Ptr<'T>, 'T>[]) = genericNull<Ptr<'T>, 'T>
+      gc = genericNull<Ptr<'T>, 'T>
 
-  let cons pool roots head tail =
-    match GcNewArray pool roots [| head; getAddress tail |] with
+  let cons pool gc head tail =
+    match GcNewArray pool gc [| head; getAddress tail |] with
     | None -> oom()
     | Some address -> address
 
-  let private tail<'T when 'T: struct and 'T:> System.IConvertible and 'T :> IInto<int>> 
-        (pool: StructPool<'T,'T>)
-        (list: TypedPointer<'T,'T>) =
+  let private tail<'T when 'T: struct and 'T:> System.IConvertible> 
+        (pool: StructPool<Ptr<'T>,'T>)
+        (list: TypedPointer<Ptr<'T>,'T>) =
     let address = into<int>(getAddress list) + 1
     let untypedPtr = Ptr<'T>.op_Explicit address
-    let typedPtr: TypedPointer<'T,'T> = Pointer.makeTyped<'T,'T> untypedPtr
+    let typedPtr = Pointer.makeTyped<Ptr<'T>,'T> untypedPtr
     let tail: 'T = Ref pool typedPtr
-    TypedPointer<'T,'T>(tail)
+    TypedPointer<Ptr<'T>,'T>(Ptr<'T>.op_Explicit tail)
 
-  let switch<'T when 'T: struct and 'T:> System.IConvertible and 'T :> IInto<int>> 
-        (pool: StructPool<'T,'T>)
-        (list: TypedPointer<'T,'T>) onEmpty onPopulated =
+  let switch<'T, 'R when 'T: struct and 'T:> System.IConvertible> 
+        (pool: StructPool<Ptr<'T>,'T>)
+        (list: TypedPointer<Ptr<'T>,'T>) (onEmpty: unit -> 'R) onPopulated =
     if Pointer.isNull list then
       onEmpty()
     else
