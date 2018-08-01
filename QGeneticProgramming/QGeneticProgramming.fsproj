@@ -80,9 +80,6 @@
   </Choose>
   <Import Project="$(FSharpTargetsPath)" />
   <ItemGroup>
-    <Compile Include="Values.fs" />
-    <Compile Include="Types.fs" />
-    <Compile Include="PrimitiveExecutor.fs" />
     <Compile Include="PrimitiveStrategy.fs" />
     <Compile Include="SolverStateSerializer.fs" />
     <Compile Include="EvolutionWorker.fs" />

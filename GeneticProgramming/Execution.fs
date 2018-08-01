@@ -24,7 +24,7 @@ module Cancellation =
             checkCancel()
 
 type IExpressionExecutor<'P, 'i, 'o when 'P :> IInto<int>> =
-    abstract Execute: timeLimit:int * expr: Expression<'P> * input: 'i ->
+    abstract Execute: timeLimit:int * expr: ERef<'P> * input: 'i ->
                        ComputationResult.ComputationResult<'o, exn>
 
 type ICompiledExpression<'args, 'result> =

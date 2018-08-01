@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <DefineConstants>TRACE;ASYNC</DefineConstants>
+    <DefineConstants>TRACE;ASYNC</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="PrimitiveExecutor.fs" />
+    <Compile Include="Types.fs" />
+    <Compile Include="Values.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Lost.FSharp" Version="1.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Deps\ShortPointers\src\Lost.ShortPointers.fsproj" />
+    <ProjectReference Include="..\GeneticProgramming\GeneticProgramming.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="4.5.2" />
+  </ItemGroup>
+
+</Project>

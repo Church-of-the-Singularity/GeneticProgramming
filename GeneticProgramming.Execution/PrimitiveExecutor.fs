@@ -1,14 +1,13 @@
 ﻿namespace GeneticProgramming.Execution
 
 open ComputationResult
-
-open Swensen.Unquote
+open Lost.Into
 
 open GeneticProgramming.AST
 
 
-type PrimitiveExecutor<'i, 'o>(compiler: IExpressionCompiler, ?cache, ?cacheLimit) =
-    let cache: System.Collections.Generic.Dictionary<Expression, System.WeakReference> = defaultArg cache null
+type PrimitiveExecutor<'i, 'o, 'P when 'P :> IInto<int>>(compiler: IExpressionCompiler, ?cache, ?cacheLimit) =
+    let cache: System.Collections.Generic.Dictionary<ERef<'P>, System.WeakReference> = defaultArg cache null
     let cacheLimit = defaultArg cacheLimit 256*1024
 
     static let executed = ref 0L
@@ -18,8 +17,8 @@ type PrimitiveExecutor<'i, 'o>(compiler: IExpressionCompiler, ?cache, ?cacheLimi
 
     let compile = 
         let compile =
-            fun (expr: Expression) ->
-                let compiledExpression = compiler.Compile<'i,'o>(expr)
+            fun (expr: ERef<'P>) ->
+                let compiledExpression = compiler.Compile<'P, 'i,'o>(expr)
                 fun o -> compiledExpression.Invoke(o: 'i)
 
         if cache =&= null then compile
@@ -29,7 +28,7 @@ type PrimitiveExecutor<'i, 'o>(compiler: IExpressionCompiler, ?cache, ?cacheLimi
     static member Executed = !executed
     static member Failed = !failed
 
-    member private this.Compile(expr: Expression) =
+    member private this.Compile(expr: ERef<'P>) =
         if cache <&> null && cache.Count > cacheLimit then
             clearCache()
 
@@ -40,7 +39,7 @@ type PrimitiveExecutor<'i, 'o>(compiler: IExpressionCompiler, ?cache, ?cacheLimi
             func
             // invoke.Invoke(func, [| input |])
 
-    member this.Execute(expr: Expression, input: 'i):ComputationResult<'r, exn> =
+    member this.Execute(expr: ERef<'P>, input: 'i):ComputationResult<'r, exn> =
         System.Threading.Interlocked.Increment(executed) |> ignore
         try
             let compiled = this.Compile expr
@@ -51,12 +50,10 @@ type PrimitiveExecutor<'i, 'o>(compiler: IExpressionCompiler, ?cache, ?cacheLimi
                 System.Threading.Interlocked.Increment(failed) |> ignore
                 Fail(e.ActualCause)
 
-
-    interface IExpressionExecutor<'i, 'o> with
+    interface IExpressionExecutor<'P, 'i, 'o> with
         member this.Execute(timeLimit, expr, input) =
             use canceller = new System.Threading.CancellationTokenSource()
             canceller.CancelAfter(timeLimit)
-            
 
             #if ASYNC
             let task = async {
