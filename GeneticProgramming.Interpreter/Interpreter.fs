@@ -16,7 +16,7 @@ type private DataPtr = TypedPointer<UntypedDataPtr, DataType>
 type private IDataPtr = ITypedPointer<UntypedDataPtr, DataType>
 
 [<Struct>]
-type private Value =
+type internal Value =
   | Word of word:DataType
   | Lambda of func:(Value -> Value)
 
@@ -75,16 +75,27 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
       |> Seq.collect(fun word -> if int word + 1 < dataPool.Size then [word; word + LanguagePrimitives.GenericOne] else [word])
       |> Seq.map (fun address -> upcast toTypedPtr address : IDataPtr)
 
-    member private this.DataGC = unmanagedGC (this.GetDataRoots())
+    member internal this.DataPool = dataPool
+    member internal this.DataGC = unmanagedGC (this.GetDataRoots())
 
-    member private this.Evaluate(expr: ERef<'P>) =
+    member private this.EvaluatePrepare() =
         state.Reset()
         dataPool.Reset()
+
+    member internal this.Evaluate(expr: Expression<_>) =
+        this.EvaluatePrepare()
         this.Evaluate(expr, state)
 
-    member private this.Evaluate(eref, state: InterpreterState): Value =
-        let eval eref = this.Evaluate(eref, state)
+    member internal this.Evaluate(eref: ERef<'P>) =
+        this.EvaluatePrepare()
+        this.Evaluate(eref, state)
+
+    member private this.Evaluate(eref: ERef<'P>, state: InterpreterState): Value =
         let expr = Ref pool eref
+        this.Evaluate(expr, state)
+
+    member private this.Evaluate(expr, state: InterpreterState): Value =
+        let eval(eref: ERef<'P>) = this.Evaluate(eref, state)
         match expr with
         | Zero -> word(LanguagePrimitives.GenericZero<DataType>)
         | One -> word(LanguagePrimitives.GenericOne<DataType>)
@@ -137,7 +148,7 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
                 LanguagePrimitives.GenericZero<DataType>
             |> word
 
-        | EmptyList exprType -> word(getAddress(getAddress(ShortList.empty<DataType> dataPool this.DataGC)))
+        | EmptyList exprType -> word(getAddress(getAddress(ShortList.empty dataPool this.DataGC: DataPtr)))
 
         | Apply(fn, v) ->
             Cancellation.callCheck()
@@ -148,7 +159,8 @@ type Interpreter<'P>(pool: IPool<'P, Expression<'P>>) =
         | Cons(head, tail) ->
             let headValue = eval head
             let tailValue = eval tail
-            ShortList.cons dataPool this.DataGC headValue.int tailValue.ptr
+            let list = ShortList.cons dataPool this.DataGC headValue.int tailValue.ptr
+            list
             |> getAddress
             |> getAddress
             |> word

@@ -3,15 +3,28 @@
 open Microsoft.VisualStudio.TestTools.UnitTesting
 
 open GeneticProgramming.AST
+open GeneticProgramming.AST.Pooled
 open GeneticProgramming.Execution
 open GeneticProgramming.Types
+open Lost.Pointers
 
-type ExecutorTestsBase(compilerFactory) =
+type ExecutorTestsBase<'P when 'P: struct and 'P :> System.IConvertible>(compilerFactory) =
     static let longTimeout = 10*1000
     static let timeout = if System.Diagnostics.Debugger.IsAttached then 60*1000 else 100
+    
+    let pool = makePoolAuto<'P> 256
+    let compilerFactory() = compilerFactory pool
+    let gcNew = GcNew pool
+    let makeTerm term ``type`` = makeTerm<Ptr<'P>> term ``type`` |> gcNew
+    let checkType = checkType pool.Underlying
+    let Lambda(arg, body) = Lambda(arg, body) |> gcNew
+    let Apply(func, arg) = Apply(func, arg) |> gcNew
+    let Cons(head, tail) = Cons(head, tail) |> gcNew
+    let Term(var) = Term(var) |> gcNew
+    
 
-    let applyTwice (func2: Expression) =
-        match func2.ComputeType() with
+    let applyTwice (func2: ERef<Ptr<'P>>) =
+        match computeType pool.Underlying func2 with
         | Function(argType, Function(argType', _)) when argType = argType'->
             let v = byte 'v'
             let vVar = makeTerm v argType
@@ -23,12 +36,13 @@ type ExecutorTestsBase(compilerFactory) =
         let sumType = Function(Integer, Function(Integer, Integer))
         let aVar, bVar, sVar, vVar = makeTerm a Integer, makeTerm b Integer, makeTerm s sumType, makeTerm v Integer
 
-        let aPrev = BinOp(Diff, aVar, One)
-        let bNext = BinOp(Sum, bVar, One)
+        let aPrev = BinOp(Diff, aVar, pool.One) |> gcNew
+        let bNext = BinOp(Sum, bVar, pool.One) |> gcNew
         let sumPrevNext = Apply(Apply(sVar, aPrev), bNext)
-        let sumBody = Cond(IsZero(aVar), bVar, sumPrevNext)
-        let sumFunc = Lambda({ Term = a; Type = Integer}, Lambda({Term = b; Type = Integer}, sumBody))
-        let sumLetRec = Let{Recursive=true;Term=s;Value=sumFunc;Expression=sVar}
+        let sumBody = Cond(gcNew(IsZero(aVar)), bVar, sumPrevNext) |> gcNew
+        let sumFunc = Lambda({ Term = a; Type = Integer},
+                             Lambda({Term = b; Type = Integer}, sumBody))
+        let sumLetRec = Let{Recursive=true;Term=s;Value=sumFunc;Expression=sVar} |> gcNew
         // let s = \a -> \b -> if a=0 then b else s (a-1) (b+1)
         // let s = \a -> if a = 0 then \b -> b else \b -> s(a-1) (b+1)
         applyTwice sumLetRec 
@@ -39,15 +53,15 @@ type ExecutorTestsBase(compilerFactory) =
         let evenType = Function(Integer, Integer)
         let nVar, eVar = makeTerm n Integer, makeTerm e evenType
 
-        let nMinus2 = BinOp(Diff, nVar, IntegerConstants.two)
-        let onZeroOne = IsZero(nVar)
-        let evenBody = Cond(BinOp(Less, nVar, IntegerConstants.two),
+        let nMinus2 = BinOp(Diff, nVar, pool.Two) |> gcNew
+        let onZeroOne = IsZero(nVar) |> gcNew
+        let evenBody = Cond(BinOp(Less, nVar, pool.Two) |> gcNew,
                                 onZeroOne,
-                                Apply(eVar, nMinus2))
+                                Apply(eVar, nMinus2)) |> gcNew
         let evenFunc = Lambda({ Term = n; Type = Integer}, evenBody)
         let evenLetRec = Let{Recursive=true;Term=e;Value=evenFunc;Expression=eVar}
         // let e = n -> if n < 2 then isZero n else e(n-2)
-        evenLetRec
+        gcNew evenLetRec
 
     let customFold =
       function Function(stateType, Function(elemType, stateType')) as folderType when stateType = stateType' ->
@@ -63,21 +77,24 @@ type ExecutorTestsBase(compilerFactory) =
                 let stateTerm = makeTerm state stateType
                 let ``rec`` =
                     applyMultiple
+                        pool
                         foldTerm
                         [   folderTerm
-                            applyMultiple folderTerm [stateTerm; makeTerm head elemType]
+                            applyMultiple pool folderTerm [stateTerm; makeTerm head elemType]
                             makeTerm tail (ListType elemType)]
                 let lambdaBody =
                     Match{  List = makeTerm list (ListType elemType);
                             EmptyCase = stateTerm;
                             HeadTail = Lambda(termOfTuple(head, elemType),
-                                        Lambda(termOfTuple(tail, ListType elemType), ``rec``)) }
+                                        Lambda(termOfTuple(tail, ListType elemType), ``rec``))}
+                    |> gcNew
                 let body =
                     Lambda(termOfTuple(folder, folderType),
                         Lambda(termOfTuple(state, stateType),
                             Lambda(termOfTuple(list, ListType elemType), lambdaBody)))
 
                 Let{ Recursive = true; Term = fold; Value = body; Expression = foldTerm }
+                |> gcNew
 
     let customLength elemType =
         let l, u = byte 'l', byte 'u'
@@ -86,9 +103,9 @@ type ExecutorTestsBase(compilerFactory) =
             ExpressionType.CurriedFunction([Integer; elemType], Integer)
             |> customFold
         let folder =
-            curriedLambda [ termOfTuple(l, Integer); termOfTuple(u, elemType)]
-                          (Plus (makeTerm l Integer) One)
-        applyMultiple fold [folder; Zero]
+            curriedLambda pool [ termOfTuple(l, Integer); termOfTuple(u, elemType)]
+                          (Plus (makeTerm l Integer) pool.One |> gcNew)
+        applyMultiple pool fold [folder; pool.Zero]
     
     let customReverse elemType =
         let r, e = byte 'r', byte 'e'
@@ -97,9 +114,9 @@ type ExecutorTestsBase(compilerFactory) =
             ExpressionType.CurriedFunction([ListType elemType; elemType], ListType elemType)
             |> customFold
         let folder =
-            curriedLambda [ termOfTuple(r, ListType elemType); termOfTuple(e, elemType) ]
+            curriedLambda pool [ termOfTuple(r, ListType elemType); termOfTuple(e, elemType) ]
                           (Cons (makeTerm e elemType, makeTerm r (ListType elemType)))
-        applyMultiple fold [folder; EmptyList elemType]
+        applyMultiple pool fold [folder; EmptyList elemType |> gcNew]
 
     let customFilter elemType =
         let cond, r, e = byte 'c', byte 'r', byte 'e'
@@ -117,12 +134,16 @@ type ExecutorTestsBase(compilerFactory) =
             Cond(Apply(makeTerm cond condType, elemTerm),
                  Cons(elemTerm, resultTerm),
                  resultTerm)
+            |> gcNew
         let folder =
-            curriedLambda [ termOfTuple(r, ListType elemType); termOfTuple(e, elemType) ]
+            curriedLambda pool [ termOfTuple(r, ListType elemType); termOfTuple(e, elemType) ]
                           filterExpr
-        curriedLambda [ termOfTuple(cond, condType); termOfTuple(list, ListType elemType) ]
+        curriedLambda pool [ termOfTuple(cond, condType); termOfTuple(list, ListType elemType) ]
             (Apply(  customReverse elemType,
-                    applyMultiple fold [folder; EmptyList elemType; makeTerm list (ListType elemType)]))
+                    applyMultiple pool fold
+                      [folder;
+                       EmptyList elemType |> gcNew;
+                       makeTerm list (ListType elemType)]))
 
     let customAppend elemType =
         let res, e, a, b = byte 'r', byte 'e', byte 'a', byte 'b'
@@ -131,11 +152,11 @@ type ExecutorTestsBase(compilerFactory) =
             ExpressionType.CurriedFunction([ListType elemType; elemType], ListType elemType)
             |> customFold
         let folder =
-            curriedLambda [ termOfTuple(res, ListType elemType); termOfTuple(e, elemType) ]
+            curriedLambda pool [ termOfTuple(res, ListType elemType); termOfTuple(e, elemType) ]
                           (Cons (makeTerm e elemType, makeTerm res (ListType elemType)))
         let rev = customReverse elemType
-        curriedLambda[ termOfTuple(a, ListType elemType); termOfTuple(b, ListType elemType) ]
-            (applyMultiple fold
+        curriedLambda pool [ termOfTuple(a, ListType elemType); termOfTuple(b, ListType elemType) ]
+            (applyMultiple pool fold
                 [   folder
                     makeTerm b (ListType elemType)
                     Apply(rev, makeTerm a (ListType elemType)) ])
@@ -161,20 +182,20 @@ type ExecutorTestsBase(compilerFactory) =
                 HeadTail = Lambda(h, Lambda(t,
                     Let { Term = filter.Term; Recursive = false; Value = customFilter int;
                     Expression =
-                    Let { Term = lessEq.Term; Recursive = false; Value = applyMultiple
-                        (Term filter) [ Lambda(v, IsLess (Term v) (Term h)); Term t ];
+                    Let { Term = lessEq.Term; Recursive = false; Value = applyMultiple pool
+                        (Term filter) [ Lambda(v, IsLess (Term v) (Term h) |> gcNew); Term t ];
                     Expression =
-                    Let { Term = greater.Term; Recursive = false; Value = applyMultiple
-                        (Term filter) [ Lambda(v, Not(IsLess(Term v) (Term h))); Term t ];
+                    Let { Term = greater.Term; Recursive = false; Value = applyMultiple pool
+                        (Term filter) [ Lambda(v, Not(IsLess(Term v) (Term h) |> gcNew) |> gcNew); Term t ];
                     Expression =
-                    applyMultiple (customAppend int)
+                    applyMultiple pool (customAppend int)
                         [ (Apply(Term(sort), Term(lessEq)));
                           (Cons(Term(h), Apply(Term(sort), Term(greater))))]
                     |> checkType
-                    } |> checkType } |> checkType } |> checkType
+                    } |> gcNew |> checkType } |> gcNew |> checkType } |> gcNew |> checkType
                  ))
-            })
-        } |> checkType
+            } |> gcNew)
+        } |> gcNew |> checkType
 
 //    let customQsort =
 //        
@@ -186,19 +207,19 @@ type ExecutorTestsBase(compilerFactory) =
 //                let notLess = List.filter (fun x -> x >= e) rest
 //                append less (e :: notLess)
                           
-    let createExecutor(): IExpressionExecutor<'a, 'b> =
+    let createExecutor(): IExpressionExecutor<Ptr<'P>, 'a, 'b> =
         let compiler = compilerFactory()
         upcast PrimitiveExecutor(compiler)
 
     let testListLength (list: int list) =
         let len = List.length list
-        let executor: IExpressionExecutor<int list, int> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int list, int> = createExecutor()
         let computed = executor.Execute(longTimeout, customLength Integer, list).Value
         Assert.AreEqual(len, computed)
 
     let testReverse (list: int list) =
         let reversed = List.rev list
-        let executor: IExpressionExecutor<int list, int list> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, customReverse Integer, list).Value
         Assert.AreEqual(box reversed, computed)
 
@@ -206,9 +227,9 @@ type ExecutorTestsBase(compilerFactory) =
         let filtered = List.filter(fun e -> e > 0) list
         let filter = Lambda(
                         termOfTuple(1uy, Integer),
-                        BinOp(Less, Zero, makeTerm 1uy Integer))
+                        BinOp(Less, pool.Zero, makeTerm 1uy Integer) |> gcNew)
         let filterNonPositive = Apply(customFilter Integer, filter)
-        let executor: IExpressionExecutor<int list, int list> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, filterNonPositive, list).Value
         Assert.AreEqual(filtered, computed)
 
@@ -217,13 +238,13 @@ type ExecutorTestsBase(compilerFactory) =
         let selfAppend =
             let append = customAppend Integer
             applyTwice append
-        let executor: IExpressionExecutor<int list, int list> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, selfAppend, a).Value
         Assert.AreEqual(sum, computed)
     
     let testSort(a: int list) =
         let sorted = List.sort a
-        let executor: IExpressionExecutor<int list, int list> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int list, int list> = createExecutor()
         let computed = executor.Execute(timeout, customSort, a).Value
         Assert.AreEqual(sorted, computed)
 
@@ -234,13 +255,13 @@ type ExecutorTestsBase(compilerFactory) =
 
     [<TestMethod>]
     member this.DoubleIsCorrect() =
-        let executor: IExpressionExecutor<int, int> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int, int> = createExecutor()
         let twoHundreds = executor.Execute(timeout, double, 100).Value
         Assert.AreEqual(box 200, twoHundreds)
 
     [<TestMethod>]
     member this.IsEvenIsCorrect() =
-        let executor: IExpressionExecutor<int, int> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int, int> = createExecutor()
         let even103 = executor.Execute(timeout, isEven, 103).Value
         Assert.AreEqual(box 0, even103)
 
@@ -249,7 +270,7 @@ type ExecutorTestsBase(compilerFactory) =
 
     [<TestMethod>]
     member this.ComplexTailCallsWork() =
-        let executor: IExpressionExecutor<int, int> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int, int> = createExecutor()
         let twoThousands = executor.Execute(timeout, double, 1000).Value
         Assert.AreEqual(2000, twoThousands)
 
@@ -258,7 +279,7 @@ type ExecutorTestsBase(compilerFactory) =
 
     [<TestMethod>]
     member this.SimpleTailCallsWork() =
-        let executor: IExpressionExecutor<int, int> = createExecutor()
+        let executor: IExpressionExecutor<Ptr<'P>, int, int> = createExecutor()
         let even3 = executor.Execute(timeout, isEven, 3).Value
         Assert.AreEqual(box 0, even3)
 
@@ -289,14 +310,21 @@ type ExecutorTestsBase(compilerFactory) =
     member this.Sort() =
         testSort [-5; 2; 1; 40; 15; 10; 11; -20; 127; -127; 42; 11; 3; 7]
 
+open GeneticProgramming.Interpreter
+
 module Compilers =
-    let unquoteCompilerFactory(): IExpressionCompiler = upcast QuotationCompiler()
-    let dlrCompilerFactory(): IExpressionCompiler = upcast DlrCompiler()
+    //let unquoteCompilerFactory(): IExpressionCompiler = upcast QuotationCompiler()
+    //let dlrCompilerFactory(): IExpressionCompiler = upcast DlrCompiler()
+    let interpreterFactory(pool: ExpressionPool<_>): IExpressionCompiler<_> = upcast InterpreterPseudoCompiler(pool.Underlying)
 
 [<TestClass>]
-type UnquoteExecutorTests() =
-    inherit ExecutorTestsBase(Compilers.unquoteCompilerFactory)
+type InterpreterTests() =
+    inherit ExecutorTestsBase<DataType>(Compilers.interpreterFactory)
 
-[<TestClass>]
-type DlrExecutorTests() =
-    inherit ExecutorTestsBase(Compilers.dlrCompilerFactory)
+//[<TestClass>]
+//type UnquoteExecutorTests() =
+//    inherit ExecutorTestsBase(Compilers.unquoteCompilerFactory)
+
+//[<TestClass>]
+//type DlrExecutorTests() =
+//    inherit ExecutorTestsBase(Compilers.dlrCompilerFactory)
