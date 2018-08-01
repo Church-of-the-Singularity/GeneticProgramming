@@ -21,13 +21,13 @@
     <Compile Include="PrimitiveSolver.fs" />
     <Compile Include="ShortDataModel.fs" />
   </ItemGroup>
-
+  
   <ItemGroup>
     <PackageReference Include="Lost.FSharp" Version="1.2.1" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Deps\ShortPointers\src\Lost.ShortPointers.fsproj"/>
+    <ProjectReference Include="..\Deps\ShortPointers\src\Lost.ShortPointers.fsproj" />
   </ItemGroup>
 
   <ItemGroup>
