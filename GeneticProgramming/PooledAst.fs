@@ -10,62 +10,66 @@ type private CacheEntry<'P> = Lazy<ERef<'P>>
 
 type ExpressionPool<'P when 'P :> IInto<int>> =
   private {
-    Pool: StructPool<'P, Expression<'P>>;
+    pool: StructPool<'P, Expression<'P>>;
     mutable Roots: ERef<'P> list;
-    Zero: CacheEntry<'P>;
-    One: CacheEntry<'P>;
-    Two: CacheEntry<'P>;
+    zero: CacheEntry<'P>;
+    one: CacheEntry<'P>;
+    two: CacheEntry<'P>;
   }
 
-  member this.Underlying = this.Pool
+  member this.Underlying = this.pool
+  member this.One = this.one.Value
+  member this.Zero = this.zero.Value
+  member this.Two = this.two.Value
 
 let private _new_ pool value =
   let roots = Seq.cast pool.Roots
   let gc = managedGC roots
-  match GcNew pool.Pool gc value with
+  match GcNew pool.pool gc value with
   | Some ptr -> ptr
   | _ -> System.OutOfMemoryException() |> raise
 
 let GcNew = _new_
   
 
-let makePoolAuto size =
+let makePoolAuto<'P when 'P: struct and 'P :> System.IConvertible> size =
   let pool = StructPool.makePoolGeneric<'P, Expression<Ptr<'P>>> size
   let rec result =
     let one = lazy(_new_ result One)
-    { Pool = pool;
+    { pool = pool;
       Roots = [];
-      Zero = lazy(_new_ result  Zero); 
-      One = one;
-      Two = lazy(_new_ result (BinOp(Sum, one.Value, one.Value)));}
+      zero = lazy(_new_ result  Zero); 
+      one = one;
+      two = lazy(_new_ result (BinOp(Sum, one.Value, one.Value)));}
   result
 
 module IntegerConstants =
-  let two pool = pool.Two.Value
+  let two pool = pool.two.Value
 
   let make pool n =
       let rec make n =
-        if n = 0 then pool.Zero.Value
-        elif n = 1 then pool.One.Value
+        if n = 0 then pool.zero.Value
+        elif n = 1 then pool.one.Value
         else
           let expr: Expression<'P> =
             if n = -1 then
-              BinOp(Diff, pool.Zero.Value, pool.One.Value)
+              BinOp(Diff, pool.zero.Value, pool.One)
             elif n % 2 = 0 then
-              BinOp(Mul, pool.Two.Value, make(n/2))
+              BinOp(Mul, pool.two.Value, make(n/2))
             elif n < 0 then
-              BinOp(Diff, make(n + 1), pool.One.Value)
+              BinOp(Diff, make(n + 1), pool.One)
             else
-              BinOp(Sum, pool.One.Value, make(n - 1))
+              BinOp(Sum, pool.One, make(n - 1))
           _new_ pool expr
       make n
 
 let rec curriedLambda pool args body =
     match args with
-    | [] -> body
+    | [] -> body: ERef<_>
     | arg :: restArgs ->
       let curry = curriedLambda pool restArgs body
-      Lambda(arg, _new_ pool curry)
+      Lambda(arg, curry)
+      |> _new_ pool
 
 let rec applyMultiple pool (eref: ERef<_>) args =
     let applyMultiple = applyMultiple pool
@@ -79,7 +83,7 @@ let rec applyMultiple pool (eref: ERef<_>) args =
 
 /// TODO: Check, that this function is used correctly. It is NOT recursive!
 let map pool func eref =
-    let expr = Ref pool.Pool eref
+    let expr = Ref pool.pool eref
     match expr with
     | Zero -> Zero
     | One -> One
@@ -115,16 +119,16 @@ let map pool func eref =
 
 let replace pool term replaceWith bodyRef =
     let rec replacer pool eref =
-        let expr = Ref pool.Pool eref
+        let expr = Ref pool.pool eref
         match expr with
         | Term(t) when t = term -> replaceWith
         | _ -> map pool (replacer pool) eref
     replacer pool bodyRef
 
 let rec reduce pool (eref: ERef< ^P>) =
-    let expr = Ref pool.Pool eref
+    let expr = Ref pool.pool eref
     match expr with
-    | MultiApplication pool.Pool (Lambda(term, body), arg :: restArgs) ->
+    | MultiApplication pool.pool (Lambda(term, body), arg :: restArgs) ->
         let newBody = replace pool term arg body
         reduce pool (applyMultiple pool newBody restArgs)
     | _ -> eref
