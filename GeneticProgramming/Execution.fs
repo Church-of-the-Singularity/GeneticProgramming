@@ -35,6 +35,6 @@ type ICompiledExpression<'args, 'result> =
 
 type IExpressionCompiler =
     /// Compiles specified expression
-    abstract Compile: expr: Expression<'P> -> ICompiledExpression<'args, 'result>
+    abstract Compile: expr: ERef<'P> -> ICompiledExpression<'args, 'result>
     /// Compiler data module (for translating parameters)
     abstract DataModel: IDataModel
