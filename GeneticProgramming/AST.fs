@@ -220,6 +220,10 @@ let rec computeType pool eref =
           targetType
       | _ -> failwith "bad function type"
 
+let checkType pool eref =
+  computeType pool eref |> ignore
+  eref
+
 let rec getFreeVariables pool eref =
   let expr = Ref pool eref
   let getFreeVariables = getFreeVariables pool
@@ -369,7 +373,7 @@ let Not a = IsZero(a)
 let IsLess a b = BinOp(Less, a, b)
 
 let termOfTuple (term, ``type``) = { Term = term; Type = ``type`` }
-let makeTerm term ``type`` = Term{ Term = term; Type = ``type`` }
+let makeTerm<'a> term ``type``: Expression<'a> = Term{ Term = term; Type = ``type`` }
 
 let getSubexpressions (expr: Expression<_>) = expr.Subexpressions
 
