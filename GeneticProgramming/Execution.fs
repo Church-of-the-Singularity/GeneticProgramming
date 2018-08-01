@@ -33,7 +33,7 @@ type ICompiledExpression<'args, 'result> =
     /// Evalueates expression value in compiler data model (IExpressionCompiler.DataModel)
     abstract Invoke: parameters: obj [] -> ComputationResult.ComputationResult<obj, exn>
 
-type IExpressionCompiler =
+type IExpressionCompiler<'P> =
     /// Compiles specified expression
     abstract Compile: expr: ERef<'P> -> ICompiledExpression<'args, 'result>
     /// Compiler data module (for translating parameters)

@@ -6,7 +6,7 @@ open Lost.Into
 open GeneticProgramming.AST
 
 
-type PrimitiveExecutor<'i, 'o, 'P when 'P :> IInto<int>>(compiler: IExpressionCompiler, ?cache, ?cacheLimit) =
+type PrimitiveExecutor<'i, 'o, 'P when 'P :> IInto<int>>(compiler: IExpressionCompiler<'P>, ?cache, ?cacheLimit) =
     let cache: System.Collections.Generic.Dictionary<ERef<'P>, System.WeakReference> = defaultArg cache null
     let cacheLimit = defaultArg cacheLimit 256*1024
 
@@ -18,7 +18,7 @@ type PrimitiveExecutor<'i, 'o, 'P when 'P :> IInto<int>>(compiler: IExpressionCo
     let compile = 
         let compile =
             fun (expr: ERef<'P>) ->
-                let compiledExpression = compiler.Compile<'P, 'i,'o>(expr)
+                let compiledExpression = compiler.Compile<'i,'o>(expr)
                 fun o -> compiledExpression.Invoke(o: 'i)
 
         if cache =&= null then compile
