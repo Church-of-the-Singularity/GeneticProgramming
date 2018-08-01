@@ -125,7 +125,7 @@ let replace pool term replaceWith bodyRef =
         | _ -> map pool (replacer pool) eref
     replacer pool bodyRef
 
-let rec reduce pool (eref: ERef< ^P>) =
+let rec reduce pool (eref: ERef<_>) =
     let expr = Ref pool.pool eref
     match expr with
     | MultiApplication pool.pool (Lambda(term, body), arg :: restArgs) ->
