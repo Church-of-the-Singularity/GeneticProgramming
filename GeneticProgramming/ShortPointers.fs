@@ -17,6 +17,9 @@ type PhantomData<'T> = Phantom of unit
 
 let phantom<'T> : PhantomData<'T> = Phantom()
 
+type IPool<'P, 'T when 'T: struct> =
+    abstract member GetReference: ITypedPointer<'P, 'T> -> byref<'T>
+
 type StructPool<'P, 'T when 'T: struct> =
     { data: 'T[];
       allocated: System.Collections.BitArray;
@@ -58,6 +61,11 @@ type BytePtr =
         let (BytePtr value) = value
         int value
 
+module private Test =
+    let Ref<'TPool, 'P, 'T when 'TPool :> IPool<'P, 'T>> (pool: 'TPool) = pool.GetReference
+    
+    Ref 
+
 let poolTest() =
     let pool = makePool<BytePtr, int> 10
     let wordPool = makePool<uint16, int> 10
@@ -66,8 +74,8 @@ let poolTest() =
     let (Some first) = Array.head allocated
     for i = 0 to 4 do
         let (Some ptr) = allocated.[i * 2]
-        let ref1 = Ref pool ptr
-        let ref2 = Ref pool ptr
+        let ref1 = &Ref pool ptr
+        let ref2 = &Ref pool ptr
         assert(ref1 = i * 2)
         ref1 <- i * 3
         assert(ref1 = ref2)
