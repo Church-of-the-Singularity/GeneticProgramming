@@ -131,7 +131,7 @@ let sortFitness inputs =
 
         try
             System.Threading.Interlocked.Increment(runCount) |> ignore
-            #if ASYNC
+
             let task = async {
                     let! token = Async.CancellationToken
                     Cancellation.token.Value <- token
@@ -143,14 +143,11 @@ let sortFitness inputs =
 
                     // checkCompilerEquality expr inputs
                     return
-            #endif
                         List.map2 (fun input expected ->
                             listError input expected compiledExpr) inputs expected
                         |> List.sum
-            #if ASYNC
                 }
             Async.RunSynchronously(task, 500, canceller.Token)
-            #endif
         with
             | :? System.OperationCanceledException
             | :? System.TimeoutException ->

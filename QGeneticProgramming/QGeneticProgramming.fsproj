@@ -1,84 +1,10 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>5e050989-6323-4daa-bf6a-a0bf202a697f</ProjectGuid>
     <OutputType>Exe</OutputType>
-    <RootNamespace>QGeneticProgramming</RootNamespace>
-    <AssemblyName>QGeneticProgramming</AssemblyName>
-    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
-    <Name>QGeneticProgramming</Name>
-    <TargetFrameworkProfile />
-    <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
-    <RestorePackages>true</RestorePackages>
-    <TargetFSharpCoreVersion>4.4.3.0</TargetFSharpCoreVersion>
+    <TargetFramework>net5.0</TargetFramework>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <OutputPath>..\bin\Debug\</OutputPath>
-    <DefineConstants>TRACE;DEBUG;ASYNC</DefineConstants>
-    <WarningLevel>3</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>bin\Debug\QGeneticProgramming.XML</DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-    <StartAction>Project</StartAction>
-    <StartArguments>--compiler DLR</StartArguments>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <OutputPath>..\bin\Release\</OutputPath>
-    <DefineConstants>TRACE;ASYNC</DefineConstants>
-    <WarningLevel>3</WarningLevel>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-    <DocumentationFile>bin\Release\QGeneticProgramming.XML</DocumentationFile>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup>
-    <MinimumVisualStudioVersion Condition="'$(MinimumVisualStudioVersion)' == ''">11</MinimumVisualStudioVersion>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <Tailcalls>false</Tailcalls>
-    <OutputPath>..\bin\IA32\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <WarningLevel>3</WarningLevel>
-    <DocumentationFile>..\bin\Debug\QGeneticProgramming.XML</DocumentationFile>
-    <Prefer32Bit>true</Prefer32Bit>
-    <PlatformTarget>x86</PlatformTarget>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <Tailcalls>true</Tailcalls>
-    <OutputPath>bin\IA32\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <WarningLevel>3</WarningLevel>
-    <DocumentationFile>bin\Release\QGeneticProgramming.XML</DocumentationFile>
-    <Prefer32Bit>true</Prefer32Bit>
-    <PlatformTarget>x86</PlatformTarget>
-  </PropertyGroup>
-  <Choose>
-    <When Condition="'$(VisualStudioVersion)' == '11.0'">
-      <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets')">
-        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\..\Microsoft SDKs\F#\3.0\Framework\v4.0\Microsoft.FSharp.Targets</FSharpTargetsPath>
-      </PropertyGroup>
-    </When>
-    <Otherwise>
-      <PropertyGroup Condition="Exists('$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets')">
-        <FSharpTargetsPath>$(MSBuildExtensionsPath32)\Microsoft\VisualStudio\v$(VisualStudioVersion)\FSharp\Microsoft.FSharp.Targets</FSharpTargetsPath>
-      </PropertyGroup>
-    </Otherwise>
-  </Choose>
-  <Import Project="$(FSharpTargetsPath)" />
+
   <ItemGroup>
     <Compile Include="Values.fs" />
     <Compile Include="Types.fs" />
@@ -88,65 +14,21 @@
     <Compile Include="EvolutionWorker.fs" />
     <Compile Include="CliOptions.fs" />
     <Compile Include="QGeneticProgramming.fs" />
-    <None Include="App.config">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <Content Include="packages.config" />
   </ItemGroup>
+
   <ItemGroup>
-    <Reference Include="CommandLine">
-      <HintPath>..\packages\CommandLineParser.1.9.71\lib\net45\CommandLine.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharp.Core, Version=$(TargetFSharpCoreVersion), Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a">
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharp.PowerPack">
-      <HintPath>..\packages\FSPowerPack.Core.Community.3.0.0.0\Lib\Net40\FSharp.PowerPack.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="FSharp.PowerPack.Parallel.Seq">
-      <HintPath>..\packages\FSPowerPack.Parallel.Seq.Community.3.0.0.0\lib\Net40\FSharp.PowerPack.Parallel.Seq.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Lost.FSharp">
-      <HintPath>..\packages\Lost.FSharp.1.2.1\lib\net40\Lost.FSharp.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="mscorlib" />
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Numerics" />
-    <Reference Include="Unquote">
-      <HintPath>..\packages\Unquote.2.2.2\lib\net40\Unquote.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <ProjectReference Include="..\GeneticProgramming.DynamicRuntimeCompiler\GeneticProgramming.DynamicRuntimeCompiler.fsproj">
-      <Name>GeneticProgramming.DynamicRuntimeCompiler</Name>
-      <Project>{4a87cdb2-023f-4ee3-a799-0f5fc90ea867}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\GeneticProgramming.FSharpQuotations\GeneticProgramming.FSharpQuotations.fsproj">
-      <Name>GeneticProgramming.FSharpQuotations</Name>
-      <Project>{5d512960-c57c-49fb-b33b-2c46ef6f2679}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\GeneticProgramming\GeneticProgramming.fsproj">
-      <Name>GeneticProgramming</Name>
-      <Project>{32bf8598-e4f2-4764-9ccb-af42b4ca1e1c}</Project>
-      <Private>True</Private>
-    </ProjectReference>
-    <ProjectReference Include="..\ProcessOverseer\ProcessOverseer.fsproj">
-      <Name>ProcessOverseer</Name>
-      <Project>{7006d22f-1736-4a73-9b09-b4a2d7f90de4}</Project>
-      <Private>True</Private>
-    </ProjectReference>
+    <PackageReference Include="CommandLineParser" Version="1.9.71" />
   </ItemGroup>
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\GeneticProgramming.DynamicRuntimeCompiler\GeneticProgramming.DynamicRuntimeCompiler.fsproj" />
+    <ProjectReference Include="..\GeneticProgramming.FSharpQuotations\GeneticProgramming.FSharpQuotations.fsproj" />
+    <ProjectReference Include="..\GeneticProgramming\GeneticProgramming.fsproj" />
+    <ProjectReference Include="..\ProcessOverseer\ProcessOverseer.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="5.0.1" />
+  </ItemGroup>
+
 </Project>
